@@ -17,6 +17,22 @@ from logging.handlers import RotatingFileHandler
 import threading
 import subprocess
 
+def _early_attach_default_desktop():
+    try:
+        user32 = ctypes.windll.user32
+        h_desk = user32.GetThreadDesktop(ctypes.windll.kernel32.GetCurrentThreadId())
+        buf = ctypes.create_unicode_buffer(256)
+        needed = wintypes.DWORD()
+        user32.GetUserObjectInformationW(h_desk, 2, buf, 512, ctypes.byref(needed))
+        if buf.value.lower() != "default":
+            h_def = user32.OpenDesktopW("default", 0, False, 0x01FF)
+            if h_def:
+                user32.SetThreadDesktop(h_def)
+    except Exception:
+        pass
+
+_early_attach_default_desktop()
+
 import win32gui
 import win32con
 
@@ -25,7 +41,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter, QBrush, QPen
 
 # Импорт менеджера настроек и окна настроек
-from settings_gui import settings_mgr, SettingsDialog, get_all_codex_projects
+from settings_gui import settings_mgr, SettingsWindow, get_all_codex_projects
 
 # -------------------------------------------------------------
 # Конфигурация путей
@@ -791,14 +807,18 @@ class CodexTrayManager(QObject):
             self.switch_chat(chosen_goal[0])
 
     def open_settings_dialog(self):
-        """Открытие диалогового окна настроек в отдельном процессе settings_gui.py"""
+        """Открытие диалогового окна настроек мгновенно в том же приложении"""
         try:
-            logger.info("Открытие окна настроек через settings_gui.py...")
-            pyw = sys.executable.replace("python.exe", "pythonw.exe")
-            settings_script = os.path.join(APP_DIR, "settings_gui.py")
-            subprocess.Popen([pyw, settings_script], cwd=APP_DIR)
+            logger.info("Открытие окна настроек через SettingsWindow...")
+            if not hasattr(self, "settings_win") or self.settings_win is None:
+                self.settings_win = SettingsWindow()
+                self.settings_win.settings_saved.connect(self.on_settings_saved)
+            self.settings_win.load_values()
+            self.settings_win.show()
+            self.settings_win.raise_()
+            self.settings_win.activateWindow()
         except Exception as e:
-            logger.error(f"Ошибка запуска settings_gui: {e}")
+            logger.error(f"Ошибка открытия SettingsWindow: {e}", exc_info=True)
 
     def on_settings_saved(self):
         """Реакция на сохранение настроек из диалога"""
@@ -905,6 +925,11 @@ class CodexTrayManager(QObject):
 
     def on_quit(self):
         self.worker.stop()
+        if hasattr(self, "settings_win") and self.settings_win:
+            try:
+                self.settings_win.close()
+            except Exception:
+                pass
         self.tray.hide()
         QApplication.quit()
 
