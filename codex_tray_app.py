@@ -623,6 +623,18 @@ class CodexTrayManager(QObject):
         # Стартовое уведомление (только один раз при запуске приложения)
         QTimer.singleShot(500, self.show_initial_notification)
 
+        # Фоновый предзапуск окна настроек (для мгновенного открытия без задержек)
+        QTimer.singleShot(1500, self._prewarm_settings_window)
+
+    def _prewarm_settings_window(self):
+        try:
+            if not hasattr(self, "settings_win") or self.settings_win is None:
+                self.settings_win = SettingsWindow()
+                self.settings_win.settings_saved.connect(self.on_settings_saved)
+                logger.info("Окно настроек предварительно загружено в фоне.")
+        except Exception as e:
+            logger.debug(f"Prewarm settings window error: {e}")
+
     def create_tray_icon(self, state="active"):
         pix = QPixmap(32, 32)
         pix.fill(Qt.GlobalColor.transparent)
@@ -793,7 +805,7 @@ class CodexTrayManager(QObject):
         elif cmd == 102:
             self.on_force_resume()
         elif cmd == 103:
-            self.open_settings_dialog()
+            QTimer.singleShot(20, self.open_settings_dialog)
         elif cmd == 104:
             self.on_open_log()
         elif cmd == 105:
@@ -814,9 +826,13 @@ class CodexTrayManager(QObject):
                 self.settings_win = SettingsWindow()
                 self.settings_win.settings_saved.connect(self.on_settings_saved)
             self.settings_win.load_values()
-            self.settings_win.show()
+            self.settings_win.showNormal()
             self.settings_win.raise_()
             self.settings_win.activateWindow()
+
+            hwnd = int(self.settings_win.winId())
+            ctypes.windll.user32.ShowWindow(hwnd, 5)  # SW_SHOW
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
         except Exception as e:
             logger.error(f"Ошибка открытия SettingsWindow: {e}", exc_info=True)
 

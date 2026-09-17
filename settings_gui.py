@@ -30,20 +30,22 @@ def _early_attach_default_desktop():
 _early_attach_default_desktop()
 
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QFrame, QSizePolicy
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QFrame, QSizePolicy, QStackedWidget
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QColor, QFont
 
 from qfluentwidgets import (
-    MSFluentWindow, setTheme, Theme, FluentIcon as FIF,
+    NavigationBar, NavigationItemPosition, setTheme, Theme, FluentIcon as FIF,
     SettingCard, SettingCardGroup, SwitchSettingCard, CardWidget,
     BodyLabel, SubtitleLabel, CaptionLabel, StrongBodyLabel,
     SwitchButton, PrimaryPushButton, PushButton, ToolButton,
     SearchLineEdit, LineEdit, Slider, ComboBox, ScrollArea,
     InfoBar, InfoBarPosition, IconWidget, FluentStyleSheet
 )
+
+setTheme(Theme.DARK)
 
 # -------------------------------------------------------------
 # Пути к файлам и конфигурация
@@ -98,6 +100,35 @@ DEFAULT_SETTINGS = {
 # -------------------------------------------------------------
 TRANSLATIONS = {
     "ru": {
+        # Меню в системном трее
+        "menu_auto_resume_on": "🟢 Авто-возобновление: ВКЛЮЧЕНО",
+        "menu_auto_resume_off": "⚪ Авто-возобновление: ВЫКЛЮЧЕНО",
+        "menu_goals_submenu": "🎯 Текущие цели Codex",
+        "menu_no_goals": "Нет активных целей",
+        "menu_force_resume": "⚡ Возобновить текущую цель",
+        "menu_settings": "⚙️ Настройки...",
+        "menu_resumes_count": "📊 Возобновлений: {count}",
+        "menu_open_log": "📄 Открыть журнал (лог)",
+        "menu_open_folder": "📁 Открыть папку данных (.codex)",
+        "menu_autostart_windows": "🚀 Запуск при старте Windows",
+        "menu_exit": "❌ Выход",
+
+        # Всплывающая подсказка в трее
+        "tip_enabled": "Codex Auto-Resume: ВКЛЮЧЕНО 🟢",
+        "tip_disabled": "Codex Auto-Resume: ВЫКЛЮЧЕНО ⚪",
+        "tip_goals": "Цели ({count}): {names}",
+        "tip_resumes": "Возобновлений: {count}",
+
+        # Всплывающие уведомления Windows
+        "notif_app_title": "Codex Auto-Resume",
+        "notif_started": "Сторож фоновых задач запущен ({state})",
+        "notif_state_on": "🟢 Авто-возобновление задач ВКЛЮЧЕНО",
+        "notif_state_off": "⚪ Авто-возобновление задач ВЫКЛЮЧЕНО",
+        "notif_force_resume": "⚡ Принудительно отправлен сигнал возобновления",
+        "notif_autostart_on": "Автозапуск при старте Windows включен",
+        "notif_autostart_off": "Автозапуск при старте Windows отключен",
+
+        # Окно настроек
         "dialog_title": "Настройки Codex Auto-Resume",
         "nav_general": "Общие",
         "nav_errors": "Ошибки",
@@ -166,6 +197,35 @@ TRANSLATIONS = {
         "msg_saved_desc": "Новые параметры успешно сохранены и вступили в силу."
     },
     "en": {
+        # Tray context menu
+        "menu_auto_resume_on": "🟢 Auto-Resume: ENABLED",
+        "menu_auto_resume_off": "⚪ Auto-Resume: DISABLED",
+        "menu_goals_submenu": "🎯 Current Codex Goals",
+        "menu_no_goals": "No active goals",
+        "menu_force_resume": "⚡ Resume Current Goal",
+        "menu_settings": "⚙️ Settings...",
+        "menu_resumes_count": "📊 Resumes count: {count}",
+        "menu_open_log": "📄 Open Log File",
+        "menu_open_folder": "📁 Open Data Folder (.codex)",
+        "menu_autostart_windows": "🚀 Start with Windows",
+        "menu_exit": "❌ Exit",
+
+        # Tray tooltip
+        "tip_enabled": "Codex Auto-Resume: ENABLED 🟢",
+        "tip_disabled": "Codex Auto-Resume: DISABLED ⚪",
+        "tip_goals": "Goals ({count}): {names}",
+        "tip_resumes": "Resumes: {count}",
+
+        # Windows notifications
+        "notif_app_title": "Codex Auto-Resume",
+        "notif_started": "Background task guardian started ({state})",
+        "notif_state_on": "🟢 Task auto-resume is ENABLED",
+        "notif_state_off": "⚪ Task auto-resume is DISABLED",
+        "notif_force_resume": "⚡ Force resume signal sent",
+        "notif_autostart_on": "Start with Windows enabled",
+        "notif_autostart_off": "Start with Windows disabled",
+
+        # Settings dialog
         "dialog_title": "Codex Auto-Resume Settings",
         "nav_general": "General",
         "nav_errors": "Errors",
@@ -440,9 +500,9 @@ class CustomComboCard(SettingCard):
 
 
 # -------------------------------------------------------------
-# Главное окно настроек на QFluentWidgets (MSFluentWindow)
+# Главное окно настроек на QFluentWidgets (QMainWindow)
 # -------------------------------------------------------------
-class SettingsWindow(MSFluentWindow):
+class SettingsWindow(QMainWindow):
     settings_saved = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -455,10 +515,22 @@ class SettingsWindow(MSFluentWindow):
         self.resize(960, 720)
         self.setMinimumSize(880, 620)
 
-        # 100% сплошной темный фон без багов Acrylic/Mica
-        self.windowEffect.removeBackgroundEffect(self.winId())
+        # Нативная темная рамка Windows 11 (DWMWA_USE_IMMERSIVE_DARK_MODE)
+        try:
+            DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+            hwnd = int(self.winId())
+            val = ctypes.c_int(1)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.byref(val), ctypes.sizeof(val)
+            )
+        except Exception:
+            pass
+
+        if os.path.exists(ICON_FILE):
+            self.setWindowIcon(QIcon(ICON_FILE))
+
         self.setStyleSheet("""
-            MSFluentWindow, .MSFluentWindow {
+            QMainWindow, QWidget#centralWidget {
                 background-color: #1a1b26;
             }
             ScrollArea, .ScrollArea {
@@ -476,13 +548,34 @@ class SettingsWindow(MSFluentWindow):
             }
         """)
 
-        if os.path.exists(ICON_FILE):
-            self.setWindowIcon(QIcon(ICON_FILE))
+        central = QWidget(self)
+        central.setObjectName("centralWidget")
+        self.setCentralWidget(central)
+
+        h_layout = QHBoxLayout(central)
+        h_layout.setContentsMargins(0, 0, 0, 0)
+        h_layout.setSpacing(0)
+
+        self.nav = NavigationBar(central)
+        self.stack = QStackedWidget(central)
+        h_layout.addWidget(self.nav)
+        h_layout.addWidget(self.stack, 1)
 
         # Построение вкладок интерфейса
         self.init_interfaces()
         self.init_navigation()
+        self.init_connections()
         self.load_values()
+
+    def addSubInterface(self, interface: QWidget, icon, text: str):
+        self.stack.addWidget(interface)
+        route_key = interface.objectName() or str(id(interface))
+        self.nav.addItem(
+            route_key,
+            icon,
+            text,
+            onClick=lambda: self.stack.setCurrentWidget(interface)
+        )
 
     def init_interfaces(self):
         self.interface_general = self.create_general_interface()
@@ -496,6 +589,16 @@ class SettingsWindow(MSFluentWindow):
         self.addSubInterface(self.interface_errors, FIF.INFO, tr("nav_errors"))
         self.addSubInterface(self.interface_projects, FIF.FOLDER, tr("nav_projects"))
         self.addSubInterface(self.interface_timers, FIF.SPEED_HIGH, tr("nav_timers"))
+        self.nav.setCurrentItem(self.interface_general.objectName())
+        self.stack.setCurrentWidget(self.interface_general)
+
+    def init_connections(self):
+        # Привязка переключателей к авто-сохранению единожды
+        self.card_autostart.checkedChanged.connect(self._sync_autostart)
+        self.card_codex_start.checkedChanged.connect(lambda c: self._quick_save("enable_on_codex_start", c))
+        self.card_notif_toggle.checkedChanged.connect(lambda c: self._quick_save("notify_on_toggle", c))
+        self.card_notif_resume.checkedChanged.connect(lambda c: self._quick_save("notify_on_resume", c))
+        self.card_sound_resume.checkedChanged.connect(lambda c: self._quick_save("sound_on_resume", c))
 
     # ---------------------------------------------------------
     # Вкладка 1: Общие и Запуск
@@ -977,21 +1080,22 @@ class SettingsWindow(MSFluentWindow):
         lang_code = s.get("language", "auto")
         codes = ["auto", "ru", "en"]
         if lang_code in codes:
+            self.card_lang.combo.blockSignals(True)
             self.card_lang.setCurrentIndex(codes.index(lang_code))
+            self.card_lang.combo.blockSignals(False)
 
-        # Запуск и оповещения
-        self.card_autostart.setChecked(bool(s.get("autostart_windows", True)))
-        self.card_codex_start.setChecked(bool(s.get("enable_on_codex_start", True)))
-        self.card_notif_toggle.setChecked(bool(s.get("notify_on_toggle", True)))
-        self.card_notif_resume.setChecked(bool(s.get("notify_on_resume", False)))
-        self.card_sound_resume.setChecked(bool(s.get("sound_on_resume", False)))
-
-        # Привязка переключателей к авто-сохранению
-        self.card_autostart.checkedChanged.connect(self._sync_autostart)
-        self.card_codex_start.checkedChanged.connect(lambda c: self._quick_save("enable_on_codex_start", c))
-        self.card_notif_toggle.checkedChanged.connect(lambda c: self._quick_save("notify_on_toggle", c))
-        self.card_notif_resume.checkedChanged.connect(lambda c: self._quick_save("notify_on_resume", c))
-        self.card_sound_resume.checkedChanged.connect(lambda c: self._quick_save("sound_on_resume", c))
+        # Запуск и оповещения (блокируем сигналы, чтобы не сохранять повторно при загрузке)
+        cards = [
+            (self.card_autostart, bool(s.get("autostart_windows", True))),
+            (self.card_codex_start, bool(s.get("enable_on_codex_start", True))),
+            (self.card_notif_toggle, bool(s.get("notify_on_toggle", True))),
+            (self.card_notif_resume, bool(s.get("notify_on_resume", False))),
+            (self.card_sound_resume, bool(s.get("sound_on_resume", False))),
+        ]
+        for card, val in cards:
+            card.switchButton.blockSignals(True)
+            card.setChecked(val)
+            card.switchButton.blockSignals(False)
 
         self.refresh_error_cards()
         self.refresh_project_cards()
@@ -1077,6 +1181,20 @@ class SettingsWindow(MSFluentWindow):
         poll_items = [tr("poll_fast"), tr("poll_standard"), tr("poll_eco")]
         self.card_poll.update_texts(tr("lbl_poll_interval"), tr("desc_poll_interval"), poll_items)
         self.card_retries.update_texts(tr("lbl_max_retries"), tr("desc_max_retries"), "раз")
+
+        # Обновление навигации
+        key_map = {
+            "generalInterface": tr("nav_general"),
+            "errorsInterface": tr("nav_errors"),
+            "projectsInterface": tr("nav_projects"),
+            "timersInterface": tr("nav_timers"),
+        }
+        for btn in self.nav.buttons():
+            rk = btn.property("routeKey")
+            if rk in key_map:
+                btn.setText(key_map[rk])
+
+        self.settings_saved.emit()
 
     def on_save_clicked(self):
         self.mgr.save()
