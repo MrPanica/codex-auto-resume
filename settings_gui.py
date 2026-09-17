@@ -1,19 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-Codex Auto-Resume Settings GUI (Native Windows 11 Fluent Dark UI)
-100% Solid GDI Dark Theme - Completely immune to GPU/DWM transparency glitches.
+Codex Auto-Resume Settings GUI (Windows 11 Fluent Design)
+Полноценный интерфейс на QFluentWidgets (Microsoft Fluent Design).
+100% сплошной темный фон, аппаратное ускорение, отсутствие лагов перемещения,
+полная мультиязычность (RU/EN), управление ошибками, проектами и таймингами.
 """
 
-import sys
 import os
+import sys
 import json
 import ctypes
 from ctypes import wintypes
-import tkinter as tk
-from tkinter import ttk
+import logging
+
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QFrame, QSizePolicy
+)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QIcon, QColor, QFont
+
+from qfluentwidgets import (
+    MSFluentWindow, setTheme, Theme, FluentIcon as FIF,
+    SettingCard, SettingCardGroup, SwitchSettingCard, CardWidget,
+    BodyLabel, SubtitleLabel, CaptionLabel, StrongBodyLabel,
+    SwitchButton, PrimaryPushButton, PushButton, ToolButton,
+    SearchLineEdit, LineEdit, Slider, ComboBox, ScrollArea,
+    InfoBar, InfoBarPosition, IconWidget, FluentStyleSheet
+)
 
 # -------------------------------------------------------------
-# Пути к файлам
+# Пути к файлам и конфигурация
 # -------------------------------------------------------------
 USER_PROFILE = os.environ.get("USERPROFILE", r"C:\Users\Artur")
 CODEX_DIR = os.path.join(USER_PROFILE, ".codex")
@@ -31,8 +48,10 @@ AUTOSTART_VBS = os.path.join(
     r"Microsoft\Windows\Start Menu\Programs\Startup\CodexAutoResumeWatchdog.vbs"
 )
 
+logger = logging.getLogger("CodexTrayApp")
+
 # -------------------------------------------------------------
-# Настройки по умолчанию
+# Дефолтная конфигурация
 # -------------------------------------------------------------
 DEFAULT_SETTINGS = {
     "language": "auto",  # "auto", "ru", "en"
@@ -63,135 +82,147 @@ DEFAULT_SETTINGS = {
 # -------------------------------------------------------------
 TRANSLATIONS = {
     "ru": {
-        "menu_auto_resume_on": "🟢 Авто-возобновление: ВКЛЮЧЕНО",
-        "menu_auto_resume_off": "⚪ Авто-возобновление: ВЫКЛЮЧЕНО",
-        "menu_goals_submenu": "🎯 Задачи и цели Codex",
-        "menu_no_goals": "(Нет недавних целей)",
-        "menu_force_resume": "⚡ Возобновить цель сейчас",
-        "menu_resumes_count": "📊 Возобновлено за сессию: {count}",
-        "menu_settings": "⚙️ Настройки...",
-        "menu_open_log": "📜 Открыть журнал (guardian.log)",
-        "menu_open_folder": "📁 Открыть папку настроек (.codex)",
-        "menu_autostart_windows": "🚀 Запускать при старте Windows",
-        "menu_exit": "❌ Выход (закрыть сторож)",
-        "tip_enabled": "Codex Auto-Resume: ВКЛЮЧЕНО",
-        "tip_disabled": "Codex Auto-Resume: ВЫКЛЮЧЕНО (пауза)",
-        "tip_goals": "Цели ({count}): {names}",
-        "tip_resumes": "Возобновлений: {count}",
-        "notif_app_title": "Codex Auto-Resume",
-        "notif_started": "Сторож активен в системном трее.\nСостояние: {state}",
-        "notif_state_on": "Авто-возобновление целей: ВКЛЮЧЕНО 🟢",
-        "notif_state_off": "Авто-возобновление целей: ВЫКЛЮЧЕНО (пауза) ⚪",
-        "notif_force_resume": "Запущено немедленное возобновление цели ⚡",
-        "notif_autostart_on": "Автозагрузка при старте Windows включена.",
-        "notif_autostart_off": "Автозагрузка при старте Windows отключена.",
         "dialog_title": "Настройки Codex Auto-Resume",
-        "tab_general": "Общие и Запуск",
-        "tab_errors": "Ошибки",
-        "tab_projects": "Проекты",
-        "tab_timers": "Тайминги и Лимиты",
+        "nav_general": "Общие",
+        "nav_errors": "Ошибки",
+        "nav_projects": "Проекты",
+        "nav_timers": "Тайминги",
+
+        "tab_general": "Общие параметры и запуск",
+        "tab_errors": "Отслеживаемые типы ошибок",
+        "tab_projects": "Участвующие проекты Codex",
+        "tab_timers": "Параметры задержек и повторов",
+
         "grp_language": "Язык интерфейса",
-        "lang_auto": "Автоматически (Язык системы)",
+        "lang_desc": "Выберите язык приложения (применяется сразу)",
+        "lang_auto": "Автоматически (Система)",
         "lang_ru": "Русский (Russian)",
         "lang_en": "English (Английский)",
+
         "grp_startup": "Параметры запуска",
-        "chk_autostart_windows": "Запускать сторож при старте Windows",
-        "chk_enable_on_codex_start": "Включать авто-возобновление при старте Кодекса",
+        "chk_autostart_windows": "Запуск при старте Windows",
+        "desc_autostart_windows": "Автоматически запускать сторож в системном трее при входе в систему",
+        "chk_enable_on_codex_start": "Включать при старте Codex",
+        "desc_enable_on_codex_start": "Автоматически переводить сторож в активный режим при запуске приложения Codex",
+
         "grp_notifications": "Оповещения",
-        "chk_notify_toggle": "Уведомление Windows при переключении (ярлык / трей)",
-        "chk_notify_resume": "Уведомление Windows при возобновлении (может мешать играм)",
-        "chk_sound_resume": "Звуковой сигнал при авто-возобновлении",
-        "grp_error_patterns": "Отслеживаемые типы ошибок",
-        "lbl_new_error": "Добавить новую ошибку (текст или ключевое слово):",
-        "placeholder_new_error": "Например: rate limit reached или context length exceeded",
-        "btn_add_error": "➕ Добавить",
-        "btn_delete_error": "🗑️ Удалить выбранную",
-        "btn_reset_errors": "🔄 Сбросить по умолчанию",
-        "grp_projects": "Участвующие проекты",
-        "lbl_projects_desc": "Сторож будет автоматически возобновлять цели только в отмеченных проектах:",
-        "btn_select_all": "✅ Выбрать все",
-        "btn_deselect_all": "❌ Снять все",
-        "grp_timers": "Тайминги авто-возобновления",
-        "lbl_retry_pause": "Пауза перед возобновлением после ошибки:",
-        "lbl_cooldown": "Защитный кулдаун после успешного возобновления:",
-        "lbl_poll_interval": "Интервал проверки состояния:",
-        "lbl_max_retries": "Максимум попыток подряд:",
+        "chk_notify_toggle": "Уведомление при переключении (Вкл / Выкл)",
+        "desc_notify_toggle": "Показывать системное уведомление Windows при клике по ярлыку на рабочем столе или в меню",
+        "chk_notify_resume": "Уведомление при возобновлении",
+        "desc_notify_resume": "Показывать уведомление при каждом авто-возобновлении (может отвлекать во время игр)",
+        "chk_sound_resume": "Звуковой сигнал при возобновлении",
+        "desc_sound_resume": "Воспроизводить системный звук Windows при успешном возобновлении цели",
+
+        "grp_error_patterns": "Список шаблонов ошибок",
+        "desc_errors_info": "Сторож анализирует последние сбои в чатах Codex и возобновляет цель при совпадении с включёнными шаблонами.",
+        "placeholder_new_error": "Введите фрагмент текста ошибки или код ошибки...",
+        "btn_add_error": "Добавить",
+        "btn_reset_errors": "Сбросить к стандартным",
+        "badge_system": "Системная",
+        "badge_custom": "Пользовательская",
+
+        "grp_projects": "Список проектов Codex",
+        "lbl_projects_desc": "Выберите проекты, для которых сторож будет автоматически возобновлять задачи. Неотмеченные проекты игнорируются.",
+        "search_projects_placeholder": "Поиск проектов по имени или пути...",
+        "btn_select_all": "Выбрать все",
+        "btn_deselect_all": "Снять со всех",
+        "projects_count_label": "Выбрано {selected} из {total} проектов",
+        "no_projects_found": "Проекты Codex пока не найдены в session_index.jsonl",
+
+        "grp_timers": "Тайминги и Лимиты",
+        "lbl_retry_pause": "Пауза перед возобновлением",
+        "desc_retry_pause": "Время ожидания перед нажатием кнопки возобновления после сбоя",
+        "lbl_cooldown": "Кулдаун после возобновления",
+        "desc_cooldown": "Задержка после возобновления перед следующим циклом проверки",
+        "lbl_poll_interval": "Частота опроса (Интервал)",
+        "desc_poll_interval": "Как часто сторож проверяет состояние генерации и окна Codex",
+        "lbl_max_retries": "Максимум попыток подряд",
+        "desc_max_retries": "Максимальное число повторов для одного сбоя (0 = без лимита)",
+
+        "poll_fast": "0.5 сек. (Быстрый)",
+        "poll_standard": "1.0 сек. (Стандартный)",
+        "poll_eco": "2.0 сек. (Энергосберегающий)",
         "unit_seconds": "сек.",
         "unlimited": "Без ограничений",
-        "btn_save": "💾 Сохранить",
-        "btn_cancel": "Отмена",
-        "btn_apply": "Применить",
-        "msg_saved_title": "Успешно",
-        "msg_saved_text": "Настройки успешно сохранены!"
+
+        "btn_save": "Сохранить настройки",
+        "msg_saved_title": "Настройки сохранены",
+        "msg_saved_desc": "Новые параметры успешно сохранены и вступили в силу."
     },
     "en": {
-        "menu_auto_resume_on": "🟢 Auto-Resume: ENABLED",
-        "menu_auto_resume_off": "⚪ Auto-Resume: DISABLED",
-        "menu_goals_submenu": "🎯 Codex Goals & Tasks",
-        "menu_no_goals": "(No recent goals)",
-        "menu_force_resume": "⚡ Resume goal now",
-        "menu_resumes_count": "📊 Resumed this session: {count}",
-        "menu_settings": "⚙️ Settings...",
-        "menu_open_log": "📜 Open log (guardian.log)",
-        "menu_open_folder": "📁 Open settings folder (.codex)",
-        "menu_autostart_windows": "🚀 Launch on Windows startup",
-        "menu_exit": "❌ Exit (close watchdog)",
-        "tip_enabled": "Codex Auto-Resume: ENABLED",
-        "tip_disabled": "Codex Auto-Resume: DISABLED (Paused)",
-        "tip_goals": "Goals ({count}): {names}",
-        "tip_resumes": "Resumes: {count}",
-        "notif_app_title": "Codex Auto-Resume",
-        "notif_started": "Watchdog active in system tray.\nState: {state}",
-        "notif_state_on": "Auto-Resume goals: ENABLED 🟢",
-        "notif_state_off": "Auto-Resume goals: DISABLED (Paused) ⚪",
-        "notif_force_resume": "Immediate goal resume triggered ⚡",
-        "notif_autostart_on": "Windows startup launch enabled.",
-        "notif_autostart_off": "Windows startup launch disabled.",
         "dialog_title": "Codex Auto-Resume Settings",
-        "tab_general": "General and Startup",
-        "tab_errors": "Errors",
-        "tab_projects": "Projects",
-        "tab_timers": "Timers and Limits",
+        "nav_general": "General",
+        "nav_errors": "Errors",
+        "nav_projects": "Projects",
+        "nav_timers": "Timers",
+
+        "tab_general": "General & Startup Options",
+        "tab_errors": "Monitored Error Patterns",
+        "tab_projects": "Participating Codex Projects",
+        "tab_timers": "Delay Timings & Limits",
+
         "grp_language": "Interface Language",
-        "lang_auto": "Auto (System Default)",
+        "lang_desc": "Choose application language (applied immediately)",
+        "lang_auto": "Automatic (System Default)",
         "lang_ru": "Russian (Русский)",
         "lang_en": "English",
+
         "grp_startup": "Startup Options",
-        "chk_autostart_windows": "Launch watchdog on Windows startup",
-        "chk_enable_on_codex_start": "Enable auto-resume when Codex starts",
+        "chk_autostart_windows": "Start on Windows Boot",
+        "desc_autostart_windows": "Automatically launch the guardian in the system tray on Windows login",
+        "chk_enable_on_codex_start": "Enable on Codex Start",
+        "desc_enable_on_codex_start": "Automatically set guardian to active state when Codex application opens",
+
         "grp_notifications": "Notifications",
-        "chk_notify_toggle": "Windows notification on manual toggle (shortcut / tray)",
-        "chk_notify_resume": "Windows notification on auto-resume (may disrupt games)",
-        "chk_sound_resume": "Play sound chime on auto-resume",
-        "grp_error_patterns": "Monitored Error Types",
-        "lbl_new_error": "Add new error pattern (text or keyword):",
-        "placeholder_new_error": "E.g.: rate limit reached or context length exceeded",
-        "btn_add_error": "➕ Add",
-        "btn_delete_error": "🗑️ Delete selected",
-        "btn_reset_errors": "🔄 Reset to defaults",
-        "grp_projects": "Participating Projects",
-        "lbl_projects_desc": "Watchdog will automatically resume goals only in checked projects:",
-        "btn_select_all": "✅ Select all",
-        "btn_deselect_all": "❌ Deselect all",
-        "grp_timers": "Auto-Resume Timings",
-        "lbl_retry_pause": "Pause before retry after error:",
-        "lbl_cooldown": "Safety cooldown after successful resume:",
-        "lbl_poll_interval": "State polling interval:",
-        "lbl_max_retries": "Max consecutive retries:",
-        "unit_seconds": "sec.",
+        "chk_notify_toggle": "Notification on Toggle (On / Off)",
+        "desc_notify_toggle": "Show a Windows desktop notification when toggled via desktop shortcut or menu",
+        "chk_notify_resume": "Notification on Resume",
+        "desc_notify_resume": "Show a notification every time a goal is resumed (may disturb during gaming)",
+        "chk_sound_resume": "Sound Alert on Resume",
+        "desc_sound_resume": "Play a Windows system chime when a goal is successfully resumed",
+
+        "grp_error_patterns": "Error Patterns List",
+        "desc_errors_info": "The guardian inspects recent chat failures and automatically resumes goals matching enabled patterns.",
+        "placeholder_new_error": "Enter error text snippet or error code...",
+        "btn_add_error": "Add Pattern",
+        "btn_reset_errors": "Reset to Defaults",
+        "badge_system": "System",
+        "badge_custom": "Custom",
+
+        "grp_projects": "Codex Projects List",
+        "lbl_projects_desc": "Select projects for which auto-resume will operate. Unchecked projects will be ignored.",
+        "search_projects_placeholder": "Search projects by name or path...",
+        "btn_select_all": "Select All",
+        "btn_deselect_all": "Deselect All",
+        "projects_count_label": "Selected {selected} of {total} projects",
+        "no_projects_found": "No Codex projects found in session_index.jsonl yet",
+
+        "grp_timers": "Timers & Limits",
+        "lbl_retry_pause": "Delay Before Resuming",
+        "desc_retry_pause": "Cooldown duration before invoking the resume action after a failure",
+        "lbl_cooldown": "Post-Resume Cooldown",
+        "desc_cooldown": "Delay after resuming before resuming active polling checks",
+        "lbl_poll_interval": "Polling Frequency (Interval)",
+        "desc_poll_interval": "How frequently the watchdog polls Codex generation state and windows",
+        "lbl_max_retries": "Max Consecutive Retries",
+        "desc_max_retries": "Maximum resume attempts for a single recurring failure (0 = unlimited)",
+
+        "poll_fast": "0.5 sec (Fast)",
+        "poll_standard": "1.0 sec (Standard)",
+        "poll_eco": "2.0 sec (Energy Saving)",
+        "unit_seconds": "sec",
         "unlimited": "Unlimited",
-        "btn_save": "💾 Save",
-        "btn_cancel": "Cancel",
-        "btn_apply": "Apply",
-        "msg_saved_title": "Success",
-        "msg_saved_text": "Settings saved successfully!"
+
+        "btn_save": "Save Settings",
+        "msg_saved_title": "Settings Saved",
+        "msg_saved_desc": "New settings have been saved and applied successfully."
     }
 }
 
 def detect_system_language():
     try:
-        windll = ctypes.windll.kernel32
-        lang_id = windll.GetUserDefaultUILanguage() & 0x3FF
+        kernel32 = ctypes.windll.kernel32
+        lang_id = kernel32.GetUserDefaultUILanguage() & 0xFF
         if lang_id == 0x19:  # Russian
             return "ru"
     except Exception:
@@ -222,8 +253,9 @@ class SettingsManager:
         try:
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=2)
+            return True
         except Exception:
-            pass
+            return False
 
     def get_effective_language(self):
         lang = self.settings.get("language", "auto")
@@ -255,560 +287,48 @@ class SettingsManager:
                 return False
         return True
 
+    def is_error_allowed(self, err_text):
+        if not err_text:
+            return True
+        err_lower = str(err_text).lower()
+        patterns = self.settings.get("error_patterns", [])
+        active_patterns = [p for p in patterns if p.get("enabled", True)]
+        if not active_patterns:
+            return False
+        for p in active_patterns:
+            pat_str = p.get("pattern", "").strip().lower()
+            if pat_str and pat_str in err_lower:
+                return True
+        return False
+
 settings_mgr = SettingsManager()
 
 def get_all_codex_projects():
-    projects = []
-    seen = set()
-    if not os.path.exists(SESSION_INDEX_FILE):
-        return projects
-    try:
-        with open(SESSION_INDEX_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    cwd = obj.get("cwd")
-                    if cwd and cwd not in seen:
-                        seen.add(cwd)
-                        name = os.path.basename(os.path.normpath(cwd)) or cwd
-                        projects.append({"name": name, "path": cwd})
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    projects.sort(key=lambda x: x["name"].lower())
+    """Сбор всех уникальных проектов из session_index.jsonl"""
+    projects = {}
+    if os.path.exists(SESSION_INDEX_FILE):
+        try:
+            with open(SESSION_INDEX_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        cwd = obj.get("cwd")
+                        if cwd:
+                            norm = os.path.normpath(cwd).replace("\\\\?\\", "")
+                            base = os.path.basename(norm) or norm
+                            if norm not in projects:
+                                projects[norm] = base
+                    except Exception:
+                        pass
+        except Exception:
+            pass
     return projects
 
-# -------------------------------------------------------------
-# Графический интерфейс окна настроек (Tkinter 100% Solid Dark)
-# -------------------------------------------------------------
-class SettingsWindow:
-    def __init__(self, root=None):
-        self.mgr = settings_mgr
-        self.mgr.load()
-
-        self.root = root or tk.Tk()
-        self.root.title(self.mgr.tr("dialog_title"))
-        self.root.geometry("720x640")
-        self.root.minsize(660, 560)
-        self.root.configure(bg="#181825")
-
-        # Активация темной рамки Windows 11 DWM
-        try:
-            self.root.update_idletasks()
-            hwnd = int(self.root.frame(), 16) if isinstance(self.root.frame(), str) else self.root.winfo_id()
-            val = ctypes.c_int(1)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(val), 4)
-        except Exception:
-            pass
-
-        # Иконка окна
-        if os.path.exists(ICON_FILE):
-            try:
-                self.root.iconbitmap(ICON_FILE)
-            except Exception:
-                pass
-
-        # Переменные настроек
-        self.var_lang = tk.StringVar(value=self.mgr.settings.get("language", "auto"))
-        self.var_autostart_win = tk.BooleanVar(value=bool(self.mgr.settings.get("autostart_windows", True)))
-        self.var_codex_start = tk.BooleanVar(value=bool(self.mgr.settings.get("enable_on_codex_start", True)))
-        self.var_notify_toggle = tk.BooleanVar(value=bool(self.mgr.settings.get("notify_on_toggle", True)))
-        self.var_notify_resume = tk.BooleanVar(value=bool(self.mgr.settings.get("notify_on_resume", False)))
-        self.var_sound_resume = tk.BooleanVar(value=bool(self.mgr.settings.get("sound_on_resume", False)))
-
-        self.var_retry_pause = tk.IntVar(value=int(self.mgr.settings.get("retry_pause_seconds", 10)))
-        self.var_cooldown = tk.IntVar(value=int(self.mgr.settings.get("post_resume_cooldown", 6)))
-        self.var_poll = tk.StringVar(value=str(self.mgr.settings.get("poll_interval_seconds", 1.0)))
-        self.var_max_retries = tk.IntVar(value=int(self.mgr.settings.get("max_retries_consecutive", 10)))
-
-        self.error_vars = []   # [(var, item_dict)]
-        self.project_vars = [] # [(var, proj_dict)]
-
-        self.setup_styles()
-        self.build_ui()
-        self.apply_translations()
-
-    def setup_styles(self):
-        self.style = ttk.Style()
-        self.style.theme_use("clam")
-
-        bg_main = "#181825"
-        bg_card = "#1e1e2e"
-        bg_active = "#313244"
-        fg_text = "#cdd6f4"
-        fg_sub = "#a6adc8"
-        accent_blue = "#89b4fa"
-
-        self.style.configure(".", background=bg_main, foreground=fg_text, font=("Segoe UI", 10))
-        self.style.configure("TNotebook", background=bg_main, borderwidth=0)
-        self.style.configure("TNotebook.Tab", background=bg_card, foreground=fg_sub, padding=[16, 8], font=("Segoe UI", 10, "bold"), borderwidth=1)
-        self.style.map("TNotebook.Tab", background=[("selected", bg_active)], foreground=[("selected", accent_blue)])
-
-        self.style.configure("TCombobox", fieldbackground="#181825", background=bg_card, foreground=fg_text, bordercolor="#45475a")
-        self.style.map("TCombobox", fieldbackground=[("readonly", "#181825")])
-
-        self.style.configure("TSpinbox", fieldbackground="#181825", background=bg_card, foreground=fg_text, bordercolor="#45475a")
-
-    def build_ui(self):
-        # Контейнер вкладок
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True, padx=14, pady=(12, 6))
-
-        # 1. Общие и Запуск
-        self.tab_general = tk.Frame(self.notebook, bg="#1e1e2e", padx=18, pady=18)
-        self.notebook.add(self.tab_general, text=" Общие и Запуск ")
-        self.build_tab_general()
-
-        # 2. Ошибки
-        self.tab_errors = tk.Frame(self.notebook, bg="#1e1e2e", padx=18, pady=18)
-        self.notebook.add(self.tab_errors, text=" Ошибки ")
-        self.build_tab_errors()
-
-        # 3. Проекты
-        self.tab_projects = tk.Frame(self.notebook, bg="#1e1e2e", padx=18, pady=18)
-        self.notebook.add(self.tab_projects, text=" Проекты ")
-        self.build_tab_projects()
-
-        # 4. Тайминги и Лимиты
-        self.tab_timers = tk.Frame(self.notebook, bg="#1e1e2e", padx=18, pady=18)
-        self.notebook.add(self.tab_timers, text=" Тайминги и Лимиты ")
-        self.build_tab_timers()
-
-        # Нижняя панель действий
-        bottom_bar = tk.Frame(self.root, bg="#181825", padx=14, pady=10)
-        bottom_bar.pack(fill="x", side="bottom")
-
-        self.btn_cancel = tk.Button(
-            bottom_bar, text="Отмена", bg="#313244", fg="#cdd6f4", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 10), relief="flat", padx=16, pady=6,
-            command=self.root.destroy, cursor="hand2"
-        )
-        self.btn_cancel.pack(side="right", padx=(8, 0))
-
-        self.btn_apply = tk.Button(
-            bottom_bar, text="Применить", bg="#313244", fg="#cdd6f4", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 10), relief="flat", padx=16, pady=6,
-            command=self.save_values, cursor="hand2"
-        )
-        self.btn_apply.pack(side="right", padx=(8, 0))
-
-        self.btn_save = tk.Button(
-            bottom_bar, text="💾 Сохранить", bg="#10b981", fg="#ffffff", activebackground="#059669",
-            activeforeground="#ffffff", font=("Segoe UI", 10, "bold"), relief="flat", padx=20, pady=6,
-            command=self.on_save_and_close, cursor="hand2"
-        )
-        self.btn_save.pack(side="right")
-
-    def build_tab_general(self):
-        self.lang_codes = ["auto", "ru", "en"]
-
-        # 1. Группа Язык
-        self.grp_lang = tk.LabelFrame(self.tab_general, text=" Язык интерфейса ", bg="#1e1e2e", fg="#89b4fa", font=("Segoe UI", 10, "bold"), padx=14, pady=10)
-        self.grp_lang.pack(fill="x", pady=(0, 14))
-
-        self.combo_lang = ttk.Combobox(self.grp_lang, state="readonly", font=("Segoe UI", 10))
-        self.combo_lang.bind("<<ComboboxSelected>>", self.on_language_selected)
-        self.combo_lang.pack(anchor="w", fill="x", pady=4)
-
-        # 2. Группа Запуск
-        self.grp_startup = tk.LabelFrame(self.tab_general, text=" Параметры запуска ", bg="#1e1e2e", fg="#89b4fa", font=("Segoe UI", 10, "bold"), padx=14, pady=10)
-        self.grp_startup.pack(fill="x", pady=(0, 14))
-
-        self.chk_autostart_win = tk.Checkbutton(
-            self.grp_startup, variable=self.var_autostart_win, bg="#1e1e2e", fg="#cdd6f4",
-            activebackground="#1e1e2e", activeforeground="#89b4fa", selectcolor="#181825",
-            font=("Segoe UI", 10), cursor="hand2"
-        )
-        self.chk_autostart_win.pack(anchor="w", pady=4)
-
-        self.chk_codex_start = tk.Checkbutton(
-            self.grp_startup, variable=self.var_codex_start, bg="#1e1e2e", fg="#cdd6f4",
-            activebackground="#1e1e2e", activeforeground="#89b4fa", selectcolor="#181825",
-            font=("Segoe UI", 10), cursor="hand2"
-        )
-        self.chk_codex_start.pack(anchor="w", pady=4)
-
-        # 3. Группа Оповещения
-        self.grp_notif = tk.LabelFrame(self.tab_general, text=" Оповещения ", bg="#1e1e2e", fg="#89b4fa", font=("Segoe UI", 10, "bold"), padx=14, pady=10)
-        self.grp_notif.pack(fill="x")
-
-        self.chk_notify_toggle = tk.Checkbutton(
-            self.grp_notif, variable=self.var_notify_toggle, bg="#1e1e2e", fg="#cdd6f4",
-            activebackground="#1e1e2e", activeforeground="#89b4fa", selectcolor="#181825",
-            font=("Segoe UI", 10), cursor="hand2"
-        )
-        self.chk_notify_toggle.pack(anchor="w", pady=4)
-
-        self.chk_notify_resume = tk.Checkbutton(
-            self.grp_notif, variable=self.var_notify_resume, bg="#1e1e2e", fg="#cdd6f4",
-            activebackground="#1e1e2e", activeforeground="#89b4fa", selectcolor="#181825",
-            font=("Segoe UI", 10), cursor="hand2"
-        )
-        self.chk_notify_resume.pack(anchor="w", pady=4)
-
-        self.chk_sound_resume = tk.Checkbutton(
-            self.grp_notif, variable=self.var_sound_resume, bg="#1e1e2e", fg="#cdd6f4",
-            activebackground="#1e1e2e", activeforeground="#89b4fa", selectcolor="#181825",
-            font=("Segoe UI", 10), cursor="hand2"
-        )
-        self.chk_sound_resume.pack(anchor="w", pady=4)
-
-    def build_tab_errors(self):
-        self.grp_errors = tk.LabelFrame(self.tab_errors, text=" Отслеживаемые типы ошибок ", bg="#1e1e2e", fg="#89b4fa", font=("Segoe UI", 10, "bold"), padx=14, pady=10)
-        self.grp_errors.pack(fill="both", expand=True)
-
-        container = tk.Frame(self.grp_errors, bg="#181825", bd=1, relief="solid")
-        container.pack(fill="both", expand=True, pady=(0, 10))
-
-        self.canvas_errors = tk.Canvas(container, bg="#181825", highlightthickness=0)
-        scrollbar_err = ttk.Scrollbar(container, orient="vertical", command=self.canvas_errors.yview)
-        self.scroll_err_frame = tk.Frame(self.canvas_errors, bg="#181825")
-
-        self.scroll_err_frame.bind("<Configure>", lambda e: self.canvas_errors.configure(scrollregion=self.canvas_errors.bbox("all")))
-        self.canvas_errors_win = self.canvas_errors.create_window((0, 0), window=self.scroll_err_frame, anchor="nw")
-        self.canvas_errors.bind("<Configure>", lambda e: self.canvas_errors.itemconfig(self.canvas_errors_win, width=e.width))
-        self.canvas_errors.configure(yscrollcommand=scrollbar_err.set)
-
-        self.canvas_errors.pack(side="left", fill="both", expand=True)
-        scrollbar_err.pack(side="right", fill="y")
-
-        self.populate_error_items()
-
-        # Поле ввода новой ошибки
-        self.lbl_new_error = tk.Label(self.grp_errors, text="Добавить новую ошибку:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 9))
-        self.lbl_new_error.pack(anchor="w", pady=(4, 2))
-
-        add_row = tk.Frame(self.grp_errors, bg="#1e1e2e")
-        add_row.pack(fill="x", pady=(0, 8))
-
-        self.entry_new_error = tk.Entry(add_row, bg="#181825", fg="#cdd6f4", insertbackground="#cdd6f4", font=("Segoe UI", 10), bd=1, relief="solid")
-        self.entry_new_error.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=4)
-
-        self.btn_add_error = tk.Button(
-            add_row, text="➕ Добавить", bg="#313244", fg="#cdd6f4", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 9, "bold"), relief="flat", padx=12, pady=4,
-            command=self.on_add_error, cursor="hand2"
-        )
-        self.btn_add_error.pack(side="right")
-
-        # Кнопки сброса и удаления
-        ctrl_row = tk.Frame(self.grp_errors, bg="#1e1e2e")
-        ctrl_row.pack(fill="x")
-
-        self.btn_del_error = tk.Button(
-            ctrl_row, text="🗑️ Удалить выбранную", bg="#313244", fg="#f38ba8", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=10, pady=4,
-            command=self.on_delete_error, cursor="hand2"
-        )
-        self.btn_del_error.pack(side="left")
-
-        self.btn_reset_errors = tk.Button(
-            ctrl_row, text="🔄 Сбросить по умолчанию", bg="#313244", fg="#cdd6f4", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=10, pady=4,
-            command=self.on_reset_errors, cursor="hand2"
-        )
-        self.btn_reset_errors.pack(side="right")
-
-    def populate_error_items(self):
-        for widget in self.scroll_err_frame.winfo_children():
-            widget.destroy()
-        self.error_vars.clear()
-
-        patterns = self.mgr.settings.get("error_patterns", DEFAULT_SETTINGS["error_patterns"])
-        for item in patterns:
-            var = tk.BooleanVar(value=bool(item.get("enabled", True)))
-            tag = "[Своя]" if item.get("custom", False) else "[Системная]"
-            txt = f" {tag} {item.get('name', item['pattern'])} ({item['pattern']})"
-            chk = tk.Checkbutton(
-                self.scroll_err_frame, text=txt, variable=var, bg="#181825", fg="#cdd6f4",
-                activebackground="#181825", activeforeground="#89b4fa", selectcolor="#11111b",
-                font=("Segoe UI", 9), anchor="w", cursor="hand2"
-            )
-            chk.pack(fill="x", padx=6, pady=3)
-            self.error_vars.append((var, item, chk))
-
-    def on_add_error(self):
-        text = self.entry_new_error.get().strip()
-        if not text:
-            return
-        patterns = self.mgr.settings.setdefault("error_patterns", [])
-        if any(p["pattern"].lower() == text.lower() for p in patterns):
-            return
-        patterns.append({
-            "pattern": text,
-            "name": text,
-            "enabled": True,
-            "custom": True
-        })
-        self.entry_new_error.delete(0, "end")
-        self.populate_error_items()
-
-    def on_delete_error(self):
-        new_patterns = []
-        for var, item, _ in self.error_vars:
-            if item.get("custom") and not var.get():
-                continue
-            new_patterns.append(item)
-        self.mgr.settings["error_patterns"] = new_patterns
-        self.populate_error_items()
-
-    def on_reset_errors(self):
-        self.mgr.settings["error_patterns"] = [dict(p) for p in DEFAULT_SETTINGS["error_patterns"]]
-        self.populate_error_items()
-
-    def build_tab_projects(self):
-        self.grp_projects = tk.LabelFrame(self.tab_projects, text=" Участвующие проекты ", bg="#1e1e2e", fg="#89b4fa", font=("Segoe UI", 10, "bold"), padx=14, pady=10)
-        self.grp_projects.pack(fill="both", expand=True)
-
-        self.lbl_projects_desc = tk.Label(
-            self.grp_projects, text="Сторож будет автоматически возобновлять цели только в отмеченных проектах:",
-            bg="#1e1e2e", fg="#a6adc8", font=("Segoe UI", 9), wraplength=640, justify="left"
-        )
-        self.lbl_projects_desc.pack(anchor="w", pady=(0, 8))
-
-        container = tk.Frame(self.grp_projects, bg="#181825", bd=1, relief="solid")
-        container.pack(fill="both", expand=True, pady=(0, 10))
-
-        self.canvas_proj = tk.Canvas(container, bg="#181825", highlightthickness=0)
-        scrollbar_p = ttk.Scrollbar(container, orient="vertical", command=self.canvas_proj.yview)
-        self.scroll_proj_frame = tk.Frame(self.canvas_proj, bg="#181825")
-
-        self.scroll_proj_frame.bind("<Configure>", lambda e: self.canvas_proj.configure(scrollregion=self.canvas_proj.bbox("all")))
-        self.canvas_proj_win = self.canvas_proj.create_window((0, 0), window=self.scroll_proj_frame, anchor="nw")
-        self.canvas_proj.bind("<Configure>", lambda e: self.canvas_proj.itemconfig(self.canvas_proj_win, width=e.width))
-        self.canvas_proj.configure(yscrollcommand=scrollbar_p.set)
-
-        self.canvas_proj.pack(side="left", fill="both", expand=True)
-        scrollbar_p.pack(side="right", fill="y")
-
-        self.populate_project_items()
-
-        btn_row = tk.Frame(self.grp_projects, bg="#1e1e2e")
-        btn_row.pack(fill="x")
-
-        self.btn_select_all_proj = tk.Button(
-            btn_row, text="✅ Выбрать все", bg="#313244", fg="#cdd6f4", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=12, pady=4,
-            command=self.on_select_all_projects, cursor="hand2"
-        )
-        self.btn_select_all_proj.pack(side="left", padx=(0, 8))
-
-        self.btn_deselect_all_proj = tk.Button(
-            btn_row, text="❌ Снять все", bg="#313244", fg="#cdd6f4", activebackground="#45475a",
-            activeforeground="#ffffff", font=("Segoe UI", 9), relief="flat", padx=12, pady=4,
-            command=self.on_deselect_all_projects, cursor="hand2"
-        )
-        self.btn_deselect_all_proj.pack(side="left")
-
-    def populate_project_items(self):
-        for widget in self.scroll_proj_frame.winfo_children():
-            widget.destroy()
-        self.project_vars.clear()
-
-        projects = get_all_codex_projects()
-        excluded = set(os.path.normpath(p).lower() for p in self.mgr.settings.get("excluded_projects", []))
-
-        for proj in projects:
-            p_norm = os.path.normpath(proj["path"]).lower()
-            is_checked = (p_norm not in excluded)
-            var = tk.BooleanVar(value=is_checked)
-            txt = f" 📁 {proj['name']}  —  {proj['path']}"
-            chk = tk.Checkbutton(
-                self.scroll_proj_frame, text=txt, variable=var, bg="#181825", fg="#cdd6f4",
-                activebackground="#181825", activeforeground="#89b4fa", selectcolor="#11111b",
-                font=("Segoe UI", 9), anchor="w", cursor="hand2"
-            )
-            chk.pack(fill="x", padx=6, pady=3)
-            self.project_vars.append((var, proj))
-
-    def on_select_all_projects(self):
-        for var, _ in self.project_vars:
-            var.set(True)
-
-    def on_deselect_all_projects(self):
-        for var, _ in self.project_vars:
-            var.set(False)
-
-    def build_tab_timers(self):
-        self.grp_timers = tk.LabelFrame(self.tab_timers, text=" Тайминги авто-возобновления ", bg="#1e1e2e", fg="#89b4fa", font=("Segoe UI", 10, "bold"), padx=14, pady=12)
-        self.grp_timers.pack(fill="both", expand=True)
-
-        # 1. Пауза перед возобновлением
-        self.lbl_retry_pause = tk.Label(self.grp_timers, text="Пауза перед возобновлением после ошибки:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 10))
-        self.lbl_retry_pause.pack(anchor="w", pady=(4, 2))
-
-        row1 = tk.Frame(self.grp_timers, bg="#1e1e2e")
-        row1.pack(fill="x", pady=(0, 14))
-
-        self.scale_retry = tk.Scale(
-            row1, from_=2, to=60, orient="horizontal", variable=self.var_retry_pause,
-            bg="#1e1e2e", fg="#10b981", activebackground="#10b981", highlightthickness=0,
-            troughcolor="#313244", font=("Segoe UI", 9), showvalue=0, command=self.update_timer_labels
-        )
-        self.scale_retry.pack(side="left", fill="x", expand=True, padx=(0, 12))
-        self.val_retry_lbl = tk.Label(row1, text="10 сек.", bg="#1e1e2e", fg="#10b981", font=("Segoe UI", 10, "bold"), width=8, anchor="e")
-        self.val_retry_lbl.pack(side="right")
-
-        # 2. Кулдаун
-        self.lbl_cooldown = tk.Label(self.grp_timers, text="Защитный кулдаун после успешного возобновления:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 10))
-        self.lbl_cooldown.pack(anchor="w", pady=(4, 2))
-
-        row2 = tk.Frame(self.grp_timers, bg="#1e1e2e")
-        row2.pack(fill="x", pady=(0, 14))
-
-        self.scale_cooldown = tk.Scale(
-            row2, from_=2, to=30, orient="horizontal", variable=self.var_cooldown,
-            bg="#1e1e2e", fg="#10b981", activebackground="#10b981", highlightthickness=0,
-            troughcolor="#313244", font=("Segoe UI", 9), showvalue=0, command=self.update_timer_labels
-        )
-        self.scale_cooldown.pack(side="left", fill="x", expand=True, padx=(0, 12))
-        self.val_cooldown_lbl = tk.Label(row2, text="6 сек.", bg="#1e1e2e", fg="#10b981", font=("Segoe UI", 10, "bold"), width=8, anchor="e")
-        self.val_cooldown_lbl.pack(side="right")
-
-        # 3. Интервал опроса
-        self.lbl_poll = tk.Label(self.grp_timers, text="Интервал проверки состояния:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 10))
-        self.lbl_poll.pack(anchor="w", pady=(4, 2))
-
-        self.combo_poll = ttk.Combobox(self.grp_timers, state="readonly", font=("Segoe UI", 10))
-        self.combo_poll["values"] = ["0.5 сек. (Быстрый)", "1.0 сек. (Стандартный)", "2.0 сек. (Энергосберегающий)"]
-        cur_poll = float(self.mgr.settings.get("poll_interval_seconds", 1.0))
-        if cur_poll <= 0.6:
-            self.combo_poll.current(0)
-        elif cur_poll >= 1.8:
-            self.combo_poll.current(2)
-        else:
-            self.combo_poll.current(1)
-        self.combo_poll.pack(fill="x", pady=(0, 14))
-
-        # 4. Максимум попыток подряд
-        self.lbl_max_retries = tk.Label(self.grp_timers, text="Максимум попыток подряд:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 10))
-        self.lbl_max_retries.pack(anchor="w", pady=(4, 2))
-
-        self.spin_retries = ttk.Spinbox(self.grp_timers, from_=0, to=50, textvariable=self.var_max_retries, font=("Segoe UI", 10))
-        self.spin_retries.pack(fill="x")
-
-        self.update_timer_labels()
-
-    def update_timer_labels(self, _=None):
-        u = self.mgr.tr("unit_seconds")
-        self.val_retry_lbl.config(text=f"{self.var_retry_pause.get()} {u}")
-        self.val_cooldown_lbl.config(text=f"{self.var_cooldown.get()} {u}")
-
-    def on_language_selected(self, event=None):
-        idx = self.combo_lang.current()
-        if 0 <= idx < len(self.lang_codes):
-            code = self.lang_codes[idx]
-            self.var_lang.set(code)
-            self.mgr.settings["language"] = code
-            self.apply_translations()
-
-    def apply_translations(self):
-        tr = self.mgr.tr
-        self.root.title(tr("dialog_title"))
-
-        lang_labels = [tr("lang_auto"), tr("lang_ru"), tr("lang_en")]
-        self.combo_lang["values"] = lang_labels
-        cur_code = self.var_lang.get()
-        if cur_code in self.lang_codes:
-            self.combo_lang.current(self.lang_codes.index(cur_code))
-
-        self.notebook.tab(0, text=f"  {tr('tab_general')}  ")
-        self.notebook.tab(1, text=f"  {tr('tab_errors')}  ")
-        self.notebook.tab(2, text=f"  {tr('tab_projects')}  ")
-        self.notebook.tab(3, text=f"  {tr('tab_timers')}  ")
-
-        self.grp_lang.config(text=f" {tr('grp_language')} ")
-        self.grp_startup.config(text=f" {tr('grp_startup')} ")
-        self.chk_autostart_win.config(text=f" {tr('chk_autostart_windows')}")
-        self.chk_codex_start.config(text=f" {tr('chk_enable_on_codex_start')}")
-
-        self.grp_notif.config(text=f" {tr('grp_notifications')} ")
-        self.chk_notify_toggle.config(text=f" {tr('chk_notify_toggle')}")
-        self.chk_notify_resume.config(text=f" {tr('chk_notify_resume')}")
-        self.chk_sound_resume.config(text=f" {tr('chk_sound_resume')}")
-
-        self.grp_errors.config(text=f" {tr('grp_error_patterns')} ")
-        self.lbl_new_error.config(text=tr("lbl_new_error"))
-        self.btn_add_error.config(text=tr("btn_add_error"))
-        self.btn_del_error.config(text=tr("btn_delete_error"))
-        self.btn_reset_errors.config(text=tr("btn_reset_errors"))
-
-        self.grp_projects.config(text=f" {tr('grp_projects')} ")
-        self.lbl_projects_desc.config(text=tr("lbl_projects_desc"))
-        self.btn_select_all_proj.config(text=tr("btn_select_all"))
-        self.btn_deselect_all_proj.config(text=tr("btn_deselect_all"))
-
-        self.grp_timers.config(text=f" {tr('grp_timers')} ")
-        self.lbl_retry_pause.config(text=tr("lbl_retry_pause"))
-        self.lbl_cooldown.config(text=tr("lbl_cooldown"))
-        self.lbl_poll.config(text=tr("lbl_poll_interval"))
-        self.lbl_max_retries.config(text=tr("lbl_max_retries"))
-
-        self.btn_save.config(text=tr("btn_save"))
-        self.btn_cancel.config(text=tr("btn_cancel"))
-        self.btn_apply.config(text=tr("btn_apply"))
-
-        self.update_timer_labels()
-
-    def save_values(self):
-        s = self.mgr.settings
-        s["language"] = self.var_lang.get()
-        s["autostart_windows"] = self.var_autostart_win.get()
-        s["enable_on_codex_start"] = self.var_codex_start.get()
-        s["notify_on_toggle"] = self.var_notify_toggle.get()
-        s["notify_on_resume"] = self.var_notify_resume.get()
-        s["sound_on_resume"] = self.var_sound_resume.get()
-
-        s["retry_pause_seconds"] = float(self.var_retry_pause.get())
-        s["post_resume_cooldown"] = float(self.var_cooldown.get())
-
-        poll_idx = self.combo_poll.current()
-        poll_map = {0: 0.5, 1: 1.0, 2: 2.0}
-        s["poll_interval_seconds"] = poll_map.get(poll_idx, 1.0)
-
-        s["max_retries_consecutive"] = int(self.var_max_retries.get())
-
-        for var, item, _ in self.error_vars:
-            item["enabled"] = var.get()
-
-        excluded = []
-        for var, proj in self.project_vars:
-            if not var.get():
-                excluded.append(proj["path"])
-        s["excluded_projects"] = excluded
-
-        self.mgr.save()
-
-        # Автозагрузка Windows
-        try:
-            enable = s["autostart_windows"]
-            pyw = sys.executable.replace("python.exe", "pythonw.exe")
-            app_py = os.path.join(APP_DIR, "codex_tray_app.py")
-            if enable:
-                vbs = f'Set WshShell = CreateObject("WScript.Shell")\nWshShell.Run """{pyw}"" """{app_py}""", 0, False\n'
-                os.makedirs(os.path.dirname(AUTOSTART_VBS), exist_ok=True)
-                with open(AUTOSTART_VBS, "w", encoding="utf-8") as f:
-                    f.write(vbs)
-            else:
-                if os.path.exists(AUTOSTART_VBS):
-                    os.remove(AUTOSTART_VBS)
-        except Exception:
-            pass
-
-    def on_save_and_close(self):
-        self.save_values()
-        self.root.destroy()
-
-# Dummy class for compatibility if imported as SettingsDialog
-class SettingsDialog:
-    def __init__(self, parent=None):
-        pass
-
 def attach_desktop():
+    """Безопасно переключает поток на рабочий стол Default (интерактивный рабочий стол Windows)."""
     try:
         user32 = ctypes.windll.user32
         h_desk = user32.GetThreadDesktop(ctypes.windll.kernel32.GetCurrentThreadId())
@@ -822,19 +342,768 @@ def attach_desktop():
     except Exception:
         pass
 
+# -------------------------------------------------------------
+# Пользовательские карточки Fluent Design (на базе SettingCard)
+# -------------------------------------------------------------
+class CustomSliderCard(SettingCard):
+    """Карточка со слайдером на базе SettingCard"""
+    valueChanged = pyqtSignal(int)
+
+    def __init__(self, icon, title, content, min_val, max_val, cur_val, unit="сек.", parent=None):
+        super().__init__(icon, title, content, parent)
+        self.unit = unit
+        self.min_val = min_val
+
+        self.val_lbl = QLabel(f"{cur_val} {unit}", self)
+        self.val_lbl.setStyleSheet("color: #70d6ff; font-size: 13px; font-weight: bold;")
+        self.val_lbl.setFixedWidth(75)
+        self.val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        self.slider = Slider(Qt.Orientation.Horizontal, self)
+        self.slider.setRange(min_val, max_val)
+        self.slider.setValue(cur_val)
+        self.slider.setFixedWidth(180)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+
+        self.hBoxLayout.addWidget(self.val_lbl)
+        self.hBoxLayout.addSpacing(10)
+        self.hBoxLayout.addWidget(self.slider)
+        self.hBoxLayout.addSpacing(16)
+        self._on_slider_changed(cur_val)
+
+    def _on_slider_changed(self, val):
+        if self.min_val == 0 and val == 0:
+            self.val_lbl.setText(settings_mgr.tr("unlimited"))
+        else:
+            self.val_lbl.setText(f"{val} {self.unit}")
+        self.valueChanged.emit(val)
+
+    def value(self):
+        return self.slider.value()
+
+    def setValue(self, val):
+        self.slider.setValue(val)
+
+    def update_texts(self, title, content, unit):
+        self.unit = unit
+        self.titleLabel.setText(title)
+        self.contentLabel.setText(content)
+        self._on_slider_changed(self.slider.value())
+
+
+class CustomComboCard(SettingCard):
+    """Карточка с выпадающим списком ComboBox на базе SettingCard"""
+    currentIndexChanged = pyqtSignal(int)
+
+    def __init__(self, icon, title, content, items, cur_idx=0, parent=None):
+        super().__init__(icon, title, content, parent)
+        self.combo = ComboBox(self)
+        self.combo.addItems(items)
+        self.combo.setCurrentIndex(cur_idx)
+        self.combo.setFixedWidth(210)
+        self.combo.currentIndexChanged.connect(self.currentIndexChanged.emit)
+
+        self.hBoxLayout.addWidget(self.combo)
+        self.hBoxLayout.addSpacing(16)
+
+    def currentIndex(self):
+        return self.combo.currentIndex()
+
+    def setCurrentIndex(self, idx):
+        self.combo.setCurrentIndex(idx)
+
+    def update_texts(self, title, content, items=None):
+        self.titleLabel.setText(title)
+        self.contentLabel.setText(content)
+        if items:
+            cur = self.combo.currentIndex()
+            self.combo.clear()
+            self.combo.addItems(items)
+            if 0 <= cur < len(items):
+                self.combo.setCurrentIndex(cur)
+
+
+# -------------------------------------------------------------
+# Главное окно настроек на QFluentWidgets (MSFluentWindow)
+# -------------------------------------------------------------
+class SettingsWindow(MSFluentWindow):
+    settings_saved = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.mgr = settings_mgr
+        self.mgr.load()
+
+        # Инициализация геометрии и окна
+        self.setWindowTitle(self.mgr.tr("dialog_title"))
+        self.resize(960, 720)
+        self.setMinimumSize(880, 620)
+
+        # 100% сплошной темный фон без багов Acrylic/Mica
+        self.windowEffect.removeBackgroundEffect(self.winId())
+        self.setStyleSheet("""
+            MSFluentWindow, .MSFluentWindow {
+                background-color: #1a1b26;
+            }
+            ScrollArea, .ScrollArea {
+                background-color: transparent;
+                border: none;
+            }
+            CardWidget {
+                background-color: #24283b;
+                border: 1px solid #2f354d;
+                border-radius: 8px;
+            }
+            CardWidget:hover {
+                background-color: #292e42;
+                border: 1px solid #414868;
+            }
+        """)
+
+        if os.path.exists(ICON_FILE):
+            self.setWindowIcon(QIcon(ICON_FILE))
+
+        # Построение вкладок интерфейса
+        self.init_interfaces()
+        self.init_navigation()
+        self.load_values()
+
+    def init_interfaces(self):
+        self.interface_general = self.create_general_interface()
+        self.interface_errors = self.create_errors_interface()
+        self.interface_projects = self.create_projects_interface()
+        self.interface_timers = self.create_timers_interface()
+
+    def init_navigation(self):
+        tr = self.mgr.tr
+        self.addSubInterface(self.interface_general, FIF.SETTING, tr("nav_general"))
+        self.addSubInterface(self.interface_errors, FIF.INFO, tr("nav_errors"))
+        self.addSubInterface(self.interface_projects, FIF.FOLDER, tr("nav_projects"))
+        self.addSubInterface(self.interface_timers, FIF.SPEED_HIGH, tr("nav_timers"))
+
+    # ---------------------------------------------------------
+    # Вкладка 1: Общие и Запуск
+    # ---------------------------------------------------------
+    def create_general_interface(self):
+        scroll = ScrollArea()
+        scroll.setObjectName("generalInterface")
+        scroll.setWidgetResizable(True)
+
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(36, 24, 36, 24)
+        vbox.setSpacing(22)
+
+        # Заголовок страницы
+        header_layout = QHBoxLayout()
+        self.lbl_title_gen = SubtitleLabel(self.mgr.tr("tab_general"), container)
+        header_layout.addWidget(self.lbl_title_gen)
+        header_layout.addStretch(1)
+
+        self.btn_save_gen = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
+        self.btn_save_gen.clicked.connect(self.on_save_clicked)
+        header_layout.addWidget(self.btn_save_gen)
+        vbox.addLayout(header_layout)
+
+        # Группа 1: Язык
+        self.grp_lang = SettingCardGroup(self.mgr.tr("grp_language"), container)
+        lang_items = [self.mgr.tr("lang_auto"), self.mgr.tr("lang_ru"), self.mgr.tr("lang_en")]
+        self.card_lang = CustomComboCard(
+            FIF.LANGUAGE,
+            self.mgr.tr("grp_language"),
+            self.mgr.tr("lang_desc"),
+            lang_items,
+            cur_idx=0,
+            parent=self.grp_lang
+        )
+        self.card_lang.currentIndexChanged.connect(self.on_language_changed)
+        self.grp_lang.addSettingCard(self.card_lang)
+        vbox.addWidget(self.grp_lang)
+
+        # Группа 2: Параметры запуска
+        self.grp_startup = SettingCardGroup(self.mgr.tr("grp_startup"), container)
+        self.card_autostart = SwitchSettingCard(
+            FIF.POWER_BUTTON,
+            self.mgr.tr("chk_autostart_windows"),
+            self.mgr.tr("desc_autostart_windows"),
+            parent=self.grp_startup
+        )
+        self.card_codex_start = SwitchSettingCard(
+            FIF.PLAY,
+            self.mgr.tr("chk_enable_on_codex_start"),
+            self.mgr.tr("desc_enable_on_codex_start"),
+            parent=self.grp_startup
+        )
+        self.grp_startup.addSettingCard(self.card_autostart)
+        self.grp_startup.addSettingCard(self.card_codex_start)
+        vbox.addWidget(self.grp_startup)
+
+        # Группа 3: Оповещения
+        self.grp_notif = SettingCardGroup(self.mgr.tr("grp_notifications"), container)
+        self.card_notif_toggle = SwitchSettingCard(
+            FIF.CHAT,
+            self.mgr.tr("chk_notify_toggle"),
+            self.mgr.tr("desc_notify_toggle"),
+            parent=self.grp_notif
+        )
+        self.card_notif_resume = SwitchSettingCard(
+            FIF.RINGER,
+            self.mgr.tr("chk_notify_resume"),
+            self.mgr.tr("desc_notify_resume"),
+            parent=self.grp_notif
+        )
+        self.card_sound_resume = SwitchSettingCard(
+            FIF.VOLUME,
+            self.mgr.tr("chk_sound_resume"),
+            self.mgr.tr("desc_sound_resume"),
+            parent=self.grp_notif
+        )
+        self.grp_notif.addSettingCard(self.card_notif_toggle)
+        self.grp_notif.addSettingCard(self.card_notif_resume)
+        self.grp_notif.addSettingCard(self.card_sound_resume)
+        vbox.addWidget(self.grp_notif)
+
+        vbox.addStretch(1)
+        scroll.setWidget(container)
+        return scroll
+
+    # ---------------------------------------------------------
+    # Вкладка 2: Ошибки
+    # ---------------------------------------------------------
+    def create_errors_interface(self):
+        scroll = ScrollArea()
+        scroll.setObjectName("errorsInterface")
+        scroll.setWidgetResizable(True)
+
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(36, 24, 36, 24)
+        vbox.setSpacing(18)
+
+        # Заголовок страницы
+        header_layout = QHBoxLayout()
+        self.lbl_title_err = SubtitleLabel(self.mgr.tr("tab_errors"), container)
+        header_layout.addWidget(self.lbl_title_err)
+        header_layout.addStretch(1)
+
+        self.btn_save_err = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
+        self.btn_save_err.clicked.connect(self.on_save_clicked)
+        header_layout.addWidget(self.btn_save_err)
+        vbox.addLayout(header_layout)
+
+        self.lbl_desc_err = CaptionLabel(self.mgr.tr("desc_errors_info"), container)
+        self.lbl_desc_err.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
+        vbox.addWidget(self.lbl_desc_err)
+
+        # Карточка добавления новой ошибки
+        add_card = CardWidget(container)
+        add_layout = QHBoxLayout(add_card)
+        add_layout.setContentsMargins(18, 14, 18, 14)
+        add_layout.setSpacing(12)
+
+        self.edit_new_error = LineEdit(add_card)
+        self.edit_new_error.setPlaceholderText(self.mgr.tr("placeholder_new_error"))
+        self.edit_new_error.returnPressed.connect(self.on_add_error_clicked)
+        add_layout.addWidget(self.edit_new_error, 1)
+
+        self.btn_add_error = PrimaryPushButton(FIF.ADD, self.mgr.tr("btn_add_error"), add_card)
+        self.btn_add_error.clicked.connect(self.on_add_error_clicked)
+        add_layout.addWidget(self.btn_add_error)
+
+        self.btn_reset_errors = PushButton(FIF.SYNC, self.mgr.tr("btn_reset_errors"), add_card)
+        self.btn_reset_errors.clicked.connect(self.on_reset_errors_clicked)
+        add_layout.addWidget(self.btn_reset_errors)
+
+        vbox.addWidget(add_card)
+
+        # Контейнер списка шаблонов ошибок
+        self.grp_errors = SettingCardGroup(self.mgr.tr("grp_error_patterns"), container)
+        vbox.addWidget(self.grp_errors)
+
+        self.error_item_widgets = []
+
+        vbox.addStretch(1)
+        scroll.setWidget(container)
+        return scroll
+
+    def refresh_error_cards(self):
+        while self.grp_errors.cardLayout.count():
+            item = self.grp_errors.cardLayout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.error_item_widgets.clear()
+
+        patterns = self.mgr.settings.get("error_patterns", [])
+        tr = self.mgr.tr
+
+        for item_data in patterns:
+            pat = item_data.get("pattern", "")
+            name = item_data.get("name") or pat
+            enabled = item_data.get("enabled", True)
+            is_custom = item_data.get("custom", False)
+
+            card = SettingCard(FIF.INFO, name, f"Pattern: {pat}", parent=self.grp_errors)
+
+            # Бейдж (Системная / Пользовательская)
+            badge_lbl = QLabel(tr("badge_custom") if is_custom else tr("badge_system"))
+            badge_color = "#e0af68" if is_custom else "#70d6ff"
+            badge_bg = "rgba(224, 175, 104, 0.15)" if is_custom else "rgba(112, 214, 255, 0.15)"
+            badge_lbl.setStyleSheet(f"""
+                QLabel {{
+                    color: {badge_color};
+                    background-color: {badge_bg};
+                    border: 1px solid {badge_color};
+                    border-radius: 4px;
+                    padding: 3px 8px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+            """)
+            badge_lbl.setFixedWidth(115)
+            badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            card.hBoxLayout.insertWidget(0, badge_lbl)
+            card.hBoxLayout.insertSpacing(1, 14)
+
+            # Тумблер Вкл / Выкл
+            sw = SwitchButton(card)
+            sw.setChecked(enabled)
+            sw.checkedChanged.connect(lambda checked, d=item_data: self._on_error_toggled(d, checked))
+            card.hBoxLayout.addWidget(sw)
+
+            # Кнопка удаления (только для пользовательских)
+            if is_custom:
+                card.hBoxLayout.addSpacing(10)
+                del_btn = ToolButton(FIF.DELETE, card)
+                del_btn.setToolTip("Удалить шаблон")
+                del_btn.clicked.connect(lambda _, d=item_data: self._on_delete_error(d))
+                card.hBoxLayout.addWidget(del_btn)
+
+            card.hBoxLayout.addSpacing(16)
+
+            self.grp_errors.addSettingCard(card)
+            self.error_item_widgets.append((card, item_data, sw))
+
+    def _on_error_toggled(self, item_data, checked):
+        item_data["enabled"] = checked
+        self.mgr.save()
+
+    def _on_delete_error(self, item_data):
+        patterns = self.mgr.settings.get("error_patterns", [])
+        if item_data in patterns:
+            patterns.remove(item_data)
+            self.mgr.save()
+            self.refresh_error_cards()
+
+    def on_add_error_clicked(self):
+        text = self.edit_new_error.text().strip()
+        if not text:
+            return
+        patterns = self.mgr.settings.setdefault("error_patterns", [])
+        if any(p.get("pattern", "").lower() == text.lower() for p in patterns):
+            return
+        patterns.append({
+            "pattern": text.lower(),
+            "name": text,
+            "enabled": True,
+            "custom": True
+        })
+        self.mgr.save()
+        self.edit_new_error.clear()
+        self.refresh_error_cards()
+
+    def on_reset_errors_clicked(self):
+        self.mgr.settings["error_patterns"] = json.loads(json.dumps(DEFAULT_SETTINGS["error_patterns"]))
+        self.mgr.save()
+        self.refresh_error_cards()
+
+    # ---------------------------------------------------------
+    # Вкладка 3: Проекты
+    # ---------------------------------------------------------
+    def create_projects_interface(self):
+        scroll = ScrollArea()
+        scroll.setObjectName("projectsInterface")
+        scroll.setWidgetResizable(True)
+
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(36, 24, 36, 24)
+        vbox.setSpacing(18)
+
+        # Заголовок страницы
+        header_layout = QHBoxLayout()
+        self.lbl_title_proj = SubtitleLabel(self.mgr.tr("tab_projects"), container)
+        header_layout.addWidget(self.lbl_title_proj)
+        header_layout.addStretch(1)
+
+        self.btn_save_proj = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
+        self.btn_save_proj.clicked.connect(self.on_save_clicked)
+        header_layout.addWidget(self.btn_save_proj)
+        vbox.addLayout(header_layout)
+
+        self.lbl_desc_proj = CaptionLabel(self.mgr.tr("lbl_projects_desc"), container)
+        self.lbl_desc_proj.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
+        vbox.addWidget(self.lbl_desc_proj)
+
+        # Панель действий: Поиск + кнопки Выбрать все / Снять все
+        action_card = CardWidget(container)
+        action_layout = QHBoxLayout(action_card)
+        action_layout.setContentsMargins(18, 14, 18, 14)
+        action_layout.setSpacing(12)
+
+        self.search_projects = SearchLineEdit(action_card)
+        self.search_projects.setPlaceholderText(self.mgr.tr("search_projects_placeholder"))
+        self.search_projects.textChanged.connect(self.filter_project_cards)
+        action_layout.addWidget(self.search_projects, 1)
+
+        self.btn_select_all_proj = PushButton(FIF.CHECKBOX, self.mgr.tr("btn_select_all"), action_card)
+        self.btn_select_all_proj.clicked.connect(self.on_select_all_projects)
+        action_layout.addWidget(self.btn_select_all_proj)
+
+        self.btn_deselect_all_proj = PushButton(FIF.CLOSE, self.mgr.tr("btn_deselect_all"), action_card)
+        self.btn_deselect_all_proj.clicked.connect(self.on_deselect_all_projects)
+        action_layout.addWidget(self.btn_deselect_all_proj)
+
+        vbox.addWidget(action_card)
+
+        # Статистика проектов
+        self.lbl_proj_count = CaptionLabel("", container)
+        self.lbl_proj_count.setTextColor(QColor("#70d6ff"), QColor("#70d6ff"))
+        vbox.addWidget(self.lbl_proj_count)
+
+        # Список проектов
+        self.grp_projects = SettingCardGroup(self.mgr.tr("grp_projects"), container)
+        vbox.addWidget(self.grp_projects)
+
+        self.project_item_widgets = []
+
+        vbox.addStretch(1)
+        scroll.setWidget(container)
+        return scroll
+
+    def refresh_project_cards(self):
+        while self.grp_projects.cardLayout.count():
+            item = self.grp_projects.cardLayout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.project_item_widgets.clear()
+
+        all_projs = get_all_codex_projects()
+        excluded = [str(x).strip().lower() for x in self.mgr.settings.get("excluded_projects", [])]
+
+        if not all_projs:
+            empty_card = SettingCard(FIF.INFO, self.mgr.tr("no_projects_found"), "", parent=self.grp_projects)
+            self.grp_projects.addSettingCard(empty_card)
+            self.lbl_proj_count.setText("")
+            return
+
+        selected_count = 0
+        for p_path, p_base in sorted(all_projs.items(), key=lambda x: x[1].lower()):
+            is_enabled = (p_path.strip().lower() not in excluded and p_base.strip().lower() not in excluded)
+            if is_enabled:
+                selected_count += 1
+
+            card = SettingCard(FIF.FOLDER, p_base, p_path, parent=self.grp_projects)
+
+            sw = SwitchButton(card)
+            sw.setChecked(is_enabled)
+            sw.checkedChanged.connect(lambda checked, p=p_path: self._on_project_toggled(p, checked))
+            card.hBoxLayout.addWidget(sw)
+            card.hBoxLayout.addSpacing(16)
+
+            self.grp_projects.addSettingCard(card)
+            self.project_item_widgets.append((card, p_path, p_base, sw))
+
+        self.update_projects_count_label()
+
+    def update_projects_count_label(self):
+        total = len(self.project_item_widgets)
+        selected = sum(1 for _, _, _, sw in self.project_item_widgets if sw.isChecked())
+        self.lbl_proj_count.setText(self.mgr.tr("projects_count_label", selected=selected, total=total))
+
+    def _on_project_toggled(self, p_path, checked):
+        excluded = self.mgr.settings.setdefault("excluded_projects", [])
+        norm = os.path.normpath(p_path).lower()
+        if checked:
+            self.mgr.settings["excluded_projects"] = [x for x in excluded if os.path.normpath(x).lower() != norm]
+        else:
+            if not any(os.path.normpath(x).lower() == norm for x in excluded):
+                excluded.append(p_path)
+        self.mgr.save()
+        self.update_projects_count_label()
+
+    def on_select_all_projects(self):
+        self.mgr.settings["excluded_projects"] = []
+        for _, _, _, sw in self.project_item_widgets:
+            sw.setChecked(True)
+        self.mgr.save()
+        self.update_projects_count_label()
+
+    def on_deselect_all_projects(self):
+        all_paths = [p for _, p, _, _ in self.project_item_widgets]
+        self.mgr.settings["excluded_projects"] = all_paths
+        for _, _, _, sw in self.project_item_widgets:
+            sw.setChecked(False)
+        self.mgr.save()
+        self.update_projects_count_label()
+
+    def filter_project_cards(self, query):
+        q = query.strip().lower()
+        for card, p_path, p_base, _ in self.project_item_widgets:
+            match = (not q) or (q in p_path.lower()) or (q in p_base.lower())
+            card.setVisible(match)
+
+    # ---------------------------------------------------------
+    # Вкладка 4: Тайминги и Лимиты
+    # ---------------------------------------------------------
+    def create_timers_interface(self):
+        scroll = ScrollArea()
+        scroll.setObjectName("timersInterface")
+        scroll.setWidgetResizable(True)
+
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(36, 24, 36, 24)
+        vbox.setSpacing(22)
+
+        # Заголовок страницы
+        header_layout = QHBoxLayout()
+        self.lbl_title_time = SubtitleLabel(self.mgr.tr("tab_timers"), container)
+        header_layout.addWidget(self.lbl_title_time)
+        header_layout.addStretch(1)
+
+        self.btn_save_time = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
+        self.btn_save_time.clicked.connect(self.on_save_clicked)
+        header_layout.addWidget(self.btn_save_time)
+        vbox.addLayout(header_layout)
+
+        self.grp_timers = SettingCardGroup(self.mgr.tr("grp_timers"), container)
+
+        # 1. Пауза перед возобновлением
+        retry_val = int(self.mgr.settings.get("retry_pause_seconds", 10))
+        self.card_retry = CustomSliderCard(
+            FIF.SPEED_HIGH,
+            self.mgr.tr("lbl_retry_pause"),
+            self.mgr.tr("desc_retry_pause"),
+            min_val=1, max_val=60, cur_val=retry_val,
+            unit=self.mgr.tr("unit_seconds"),
+            parent=self.grp_timers
+        )
+        self.card_retry.valueChanged.connect(lambda v: self._on_timer_changed("retry_pause_seconds", float(v)))
+        self.grp_timers.addSettingCard(self.card_retry)
+
+        # 2. Кулдаун после возобновления
+        cd_val = int(self.mgr.settings.get("post_resume_cooldown", 6))
+        self.card_cooldown = CustomSliderCard(
+            FIF.STOP_WATCH,
+            self.mgr.tr("lbl_cooldown"),
+            self.mgr.tr("desc_cooldown"),
+            min_val=2, max_val=30, cur_val=cd_val,
+            unit=self.mgr.tr("unit_seconds"),
+            parent=self.grp_timers
+        )
+        self.card_cooldown.valueChanged.connect(lambda v: self._on_timer_changed("post_resume_cooldown", float(v)))
+        self.grp_timers.addSettingCard(self.card_cooldown)
+
+        # 3. Частота опроса
+        poll_items = [self.mgr.tr("poll_fast"), self.mgr.tr("poll_standard"), self.mgr.tr("poll_eco")]
+        cur_poll = float(self.mgr.settings.get("poll_interval_seconds", 1.0))
+        p_idx = 0 if cur_poll <= 0.6 else (2 if cur_poll >= 1.8 else 1)
+        self.card_poll = CustomComboCard(
+            FIF.SYNC,
+            self.mgr.tr("lbl_poll_interval"),
+            self.mgr.tr("desc_poll_interval"),
+            poll_items,
+            cur_idx=p_idx,
+            parent=self.grp_timers
+        )
+        self.card_poll.currentIndexChanged.connect(self._on_poll_changed)
+        self.grp_timers.addSettingCard(self.card_poll)
+
+        # 4. Максимум попыток подряд
+        retries_val = int(self.mgr.settings.get("max_retries_consecutive", 10))
+        self.card_retries = CustomSliderCard(
+            FIF.UPDATE,
+            self.mgr.tr("lbl_max_retries"),
+            self.mgr.tr("desc_max_retries"),
+            min_val=0, max_val=50, cur_val=retries_val,
+            unit="раз",
+            parent=self.grp_timers
+        )
+        self.card_retries.valueChanged.connect(lambda v: self._on_timer_changed("max_retries_consecutive", int(v)))
+        self.grp_timers.addSettingCard(self.card_retries)
+
+        vbox.addWidget(self.grp_timers)
+        vbox.addStretch(1)
+        scroll.setWidget(container)
+        return scroll
+
+    def _on_timer_changed(self, key, val):
+        self.mgr.settings[key] = val
+        self.mgr.save()
+
+    def _on_poll_changed(self, idx):
+        poll_map = {0: 0.5, 1: 1.0, 2: 2.0}
+        self.mgr.settings["poll_interval_seconds"] = poll_map.get(idx, 1.0)
+        self.mgr.save()
+
+    # ---------------------------------------------------------
+    # Загрузка и сохранение настроек
+    # ---------------------------------------------------------
+    def load_values(self):
+        s = self.mgr.settings
+
+        # Язык
+        lang_code = s.get("language", "auto")
+        codes = ["auto", "ru", "en"]
+        if lang_code in codes:
+            self.card_lang.setCurrentIndex(codes.index(lang_code))
+
+        # Запуск и оповещения
+        self.card_autostart.setChecked(bool(s.get("autostart_windows", True)))
+        self.card_codex_start.setChecked(bool(s.get("enable_on_codex_start", True)))
+        self.card_notif_toggle.setChecked(bool(s.get("notify_on_toggle", True)))
+        self.card_notif_resume.setChecked(bool(s.get("notify_on_resume", False)))
+        self.card_sound_resume.setChecked(bool(s.get("sound_on_resume", False)))
+
+        # Привязка переключателей к авто-сохранению
+        self.card_autostart.checkedChanged.connect(self._sync_autostart)
+        self.card_codex_start.checkedChanged.connect(lambda c: self._quick_save("enable_on_codex_start", c))
+        self.card_notif_toggle.checkedChanged.connect(lambda c: self._quick_save("notify_on_toggle", c))
+        self.card_notif_resume.checkedChanged.connect(lambda c: self._quick_save("notify_on_resume", c))
+        self.card_sound_resume.checkedChanged.connect(lambda c: self._quick_save("sound_on_resume", c))
+
+        self.refresh_error_cards()
+        self.refresh_project_cards()
+
+    def _quick_save(self, key, val):
+        self.mgr.settings[key] = val
+        self.mgr.save()
+
+    def _sync_autostart(self, checked):
+        self.mgr.settings["autostart_windows"] = checked
+        self.mgr.save()
+        try:
+            pyw = sys.executable.replace("python.exe", "pythonw.exe")
+            app_py = os.path.join(APP_DIR, "codex_tray_app.py")
+            if checked:
+                vbs = f'Set WshShell = CreateObject("WScript.Shell")\nWshShell.Run """{pyw}"" """{app_py}""", 0, False\n'
+                os.makedirs(os.path.dirname(AUTOSTART_VBS), exist_ok=True)
+                with open(AUTOSTART_VBS, "w", encoding="utf-8") as f:
+                    f.write(vbs)
+            else:
+                if os.path.exists(AUTOSTART_VBS):
+                    os.remove(AUTOSTART_VBS)
+        except Exception:
+            pass
+
+    def on_language_changed(self, idx):
+        codes = ["auto", "ru", "en"]
+        if 0 <= idx < len(codes):
+            self.mgr.settings["language"] = codes[idx]
+            self.mgr.save()
+            self.apply_translations()
+
+    def apply_translations(self):
+        tr = self.mgr.tr
+        self.setWindowTitle(tr("dialog_title"))
+
+        # Обновление заголовков и кнопок
+        self.lbl_title_gen.setText(tr("tab_general"))
+        self.lbl_title_err.setText(tr("tab_errors"))
+        self.lbl_title_proj.setText(tr("tab_projects"))
+        self.lbl_title_time.setText(tr("tab_timers"))
+
+        self.btn_save_gen.setText(tr("btn_save"))
+        self.btn_save_err.setText(tr("btn_save"))
+        self.btn_save_proj.setText(tr("btn_save"))
+        self.btn_save_time.setText(tr("btn_save"))
+
+        # Язык
+        lang_items = [tr("lang_auto"), tr("lang_ru"), tr("lang_en")]
+        self.card_lang.update_texts(tr("grp_language"), tr("lang_desc"), lang_items)
+
+        # Запуск
+        self.card_autostart.setTitle(tr("chk_autostart_windows"))
+        self.card_autostart.setContent(tr("desc_autostart_windows"))
+        self.card_codex_start.setTitle(tr("chk_enable_on_codex_start"))
+        self.card_codex_start.setContent(tr("desc_enable_on_codex_start"))
+
+        # Оповещения
+        self.card_notif_toggle.setTitle(tr("chk_notify_toggle"))
+        self.card_notif_toggle.setContent(tr("desc_notify_toggle"))
+        self.card_notif_resume.setTitle(tr("chk_notify_resume"))
+        self.card_notif_resume.setContent(tr("desc_notify_resume"))
+        self.card_sound_resume.setTitle(tr("chk_sound_resume"))
+        self.card_sound_resume.setContent(tr("desc_sound_resume"))
+
+        # Ошибки
+        self.lbl_desc_err.setText(tr("desc_errors_info"))
+        self.edit_new_error.setPlaceholderText(tr("placeholder_new_error"))
+        self.btn_add_error.setText(tr("btn_add_error"))
+        self.btn_reset_errors.setText(tr("btn_reset_errors"))
+        self.refresh_error_cards()
+
+        # Проекты
+        self.lbl_desc_proj.setText(tr("lbl_projects_desc"))
+        self.search_projects.setPlaceholderText(tr("search_projects_placeholder"))
+        self.btn_select_all_proj.setText(tr("btn_select_all"))
+        self.btn_deselect_all_proj.setText(tr("btn_deselect_all"))
+        self.update_projects_count_label()
+
+        # Тайминги
+        self.card_retry.update_texts(tr("lbl_retry_pause"), tr("desc_retry_pause"), tr("unit_seconds"))
+        self.card_cooldown.update_texts(tr("lbl_cooldown"), tr("desc_cooldown"), tr("unit_seconds"))
+        poll_items = [tr("poll_fast"), tr("poll_standard"), tr("poll_eco")]
+        self.card_poll.update_texts(tr("lbl_poll_interval"), tr("desc_poll_interval"), poll_items)
+        self.card_retries.update_texts(tr("lbl_max_retries"), tr("desc_max_retries"), "раз")
+
+    def on_save_clicked(self):
+        self.mgr.save()
+        self.settings_saved.emit()
+        InfoBar.success(
+            title=self.mgr.tr("msg_saved_title"),
+            content=self.mgr.tr("msg_saved_desc"),
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP,
+            duration=2500,
+            parent=self
+        )
+
+
+# Совместимость с кодом трея
+class SettingsDialog:
+    def __init__(self, parent=None):
+        pass
+
 def open_settings_dialog():
     attach_desktop()
-    # Защита от открытия нескольких окон одновременно
+
     hwnd = win32_find_settings_window()
     if hwnd:
         user32 = ctypes.windll.user32
         user32.SetForegroundWindow(hwnd)
-        user32.ShowWindow(hwnd, 9) # SW_RESTORE
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
         return
 
-    root = tk.Tk()
-    app = SettingsWindow(root)
-    root.mainloop()
+    app = QApplication.instance()
+    is_standalone = False
+    if not app:
+        app = QApplication(sys.argv)
+        is_standalone = True
+
+    setTheme(Theme.DARK)
+
+    win = SettingsWindow()
+    win.show()
+
+    if is_standalone:
+        sys.exit(app.exec())
 
 def win32_find_settings_window():
     import win32gui
