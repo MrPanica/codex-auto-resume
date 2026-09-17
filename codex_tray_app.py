@@ -15,6 +15,7 @@ from ctypes import wintypes
 import logging
 from logging.handlers import RotatingFileHandler
 import threading
+import subprocess
 
 import win32gui
 import win32con
@@ -29,10 +30,12 @@ from settings_gui import settings_mgr, SettingsDialog, get_all_codex_projects
 # -------------------------------------------------------------
 # Конфигурация путей
 # -------------------------------------------------------------
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
 USER_PROFILE = os.environ.get("USERPROFILE", r"C:\Users\Artur")
 CODEX_DIR = os.path.join(USER_PROFILE, ".codex")
 os.makedirs(CODEX_DIR, exist_ok=True)
 
+SETTINGS_FILE = os.path.join(CODEX_DIR, "guardian_settings.json")
 LOG_FILE = os.path.join(CODEX_DIR, "guardian.log")
 HISTORY_DB = os.path.join(CODEX_DIR, "thread_history_1.sqlite")
 GOALS_DB = os.path.join(CODEX_DIR, "goals_1.sqlite")
@@ -54,16 +57,7 @@ if not logger.handlers:
     logger.addHandler(rfh)
 
 def attach_desktop():
-    try:
-        user32 = ctypes.windll.user32
-        hwinsta = user32.OpenWindowStationW("WinSta0", False, 0x37)
-        if hwinsta:
-            user32.SetProcessWindowStation(hwinsta)
-            hdesk = user32.OpenDesktopW("Default", 0, False, 0x1FF)
-            if hdesk:
-                user32.SetThreadDesktop(hdesk)
-    except Exception:
-        pass
+    pass
 
 # -------------------------------------------------------------
 # Определение окна Codex / ChatGPT и сопоставление данных
@@ -778,24 +772,18 @@ class CodexTrayManager(QObject):
             self.switch_chat(chosen_goal[0])
 
     def open_settings_dialog(self):
-        """Открытие диалогового окна настроек"""
-        if self.settings_dialog is None:
-            self.settings_dialog = SettingsDialog()
-            self.settings_dialog.settings_saved.connect(self.on_settings_saved)
-        self.settings_dialog.load_values()
-        self.settings_dialog.apply_translations()
-        self.settings_dialog.show()
-        self.settings_dialog.activateWindow()
-        self.settings_dialog.raise_()
+        """Открытие диалогового окна настроек в отдельном процессе settings_gui.py"""
+        try:
+            logger.info("Открытие окна настроек через settings_gui.py...")
+            pyw = sys.executable.replace("python.exe", "pythonw.exe")
+            settings_script = os.path.join(APP_DIR, "settings_gui.py")
+            subprocess.Popen([pyw, settings_script], cwd=APP_DIR)
+        except Exception as e:
+            logger.error(f"Ошибка запуска settings_gui: {e}")
 
     def on_settings_saved(self):
         """Реакция на сохранение настроек из диалога"""
         self.update_tray_visuals()
-        # Синхронизация автозапуска Windows с галочкой в настройках
-        should_autostart = bool(settings_mgr.settings.get("autostart_windows", True))
-        is_autostart = os.path.exists(AUTOSTART_VBS)
-        if should_autostart != is_autostart:
-            self.on_toggle_autostart(should_autostart)
 
     def check_toggle_trigger(self):
         if os.path.exists(TOGGLE_TRIGGER):
@@ -804,6 +792,20 @@ class CodexTrayManager(QObject):
             except Exception:
                 pass
             self.on_user_toggle()
+
+        # Мониторинг изменений файла настроек guardian_settings.json
+        try:
+            if os.path.exists(SETTINGS_FILE):
+                mtime = os.path.getmtime(SETTINGS_FILE)
+                if not hasattr(self, "_last_settings_mtime"):
+                    self._last_settings_mtime = mtime
+                elif mtime > self._last_settings_mtime:
+                    self._last_settings_mtime = mtime
+                    settings_mgr.load()
+                    self.update_tray_visuals()
+                    logger.info("Настройки сторожа автоматически перезагружены.")
+        except Exception:
+            pass
 
     def on_force_resume(self):
         self.worker.force_resume()
