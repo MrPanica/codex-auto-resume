@@ -56,8 +56,27 @@ if not logger.handlers:
     rfh.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
     logger.addHandler(rfh)
 
+_desktop_attached = False
+
 def attach_desktop():
-    pass
+    """Безопасно переключает поток на рабочий стол Default (интерактивный рабочий стол Windows), если процесс запущен из sandbox/agent."""
+    global _desktop_attached
+    if _desktop_attached:
+        return
+    try:
+        user32 = ctypes.windll.user32
+        h_desk = user32.GetThreadDesktop(ctypes.windll.kernel32.GetCurrentThreadId())
+        buf = ctypes.create_unicode_buffer(256)
+        needed = wintypes.DWORD()
+        user32.GetUserObjectInformationW(h_desk, 2, buf, 512, ctypes.byref(needed))
+        if buf.value.lower() != "default":
+            h_def = user32.OpenDesktopW("default", 0, False, 0x01FF)
+            if h_def:
+                user32.SetThreadDesktop(h_def)
+                logger.info(f"Переключен рабочий стол с '{buf.value}' на 'Default'.")
+        _desktop_attached = True
+    except Exception as e:
+        logger.debug(f"attach_desktop error: {e}")
 
 # -------------------------------------------------------------
 # Определение окна Codex / ChatGPT и сопоставление данных
