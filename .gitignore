@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Logs & triggers
+*.log
+*.trigger
+*.bmp
+*.png
+
+# OS & Editors
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
