@@ -393,7 +393,7 @@ def find_uia_action_buttons(hwnd):
             "повторить", "retry", "попробовать снова", "повторить попытку"
         }
         STOP_NAMES = {
-            "остановить", "stop", "прервать", "отмена"
+            "остановить", "stop", "прервать"
         }
 
         for i in range(elems.Length):
@@ -581,7 +581,7 @@ class WatchdogWorker(QObject):
 
                 goal_btn, retry_btn, is_running = find_uia_action_buttons(hwnd)
 
-                if is_running:
+                if is_running and not (goal_btn or retry_btn):
                     # Задача генерируется прямо сейчас
                     self.consecutive_retries = 0
                     time.sleep(poll_interval)
@@ -593,13 +593,13 @@ class WatchdogWorker(QObject):
                     thread_cwd = proj_map.get(str(tid).strip()) if tid else None
 
                     # 1. Проверка фильтра проектов
-                    if thread_cwd and not settings_mgr.is_project_allowed(thread_cwd):
+                    if thread_cwd and hasattr(settings_mgr, 'is_project_allowed') and not settings_mgr.is_project_allowed(thread_cwd):
                         logger.info(f"Проект '{thread_cwd}' исключён в настройках. Авто-возобновление пропущено.")
                         time.sleep(poll_interval * 2)
                         continue
 
                     # 2. Проверка фильтра ошибок
-                    if err_json and not settings_mgr.is_error_allowed(err_json):
+                    if err_json and hasattr(settings_mgr, 'is_error_allowed') and not settings_mgr.is_error_allowed(err_json):
                         logger.info(f"Ошибка '{err_json[:60]}' отключена в настройках. Авто-возобновление пропущено.")
                         time.sleep(poll_interval * 2)
                         continue
