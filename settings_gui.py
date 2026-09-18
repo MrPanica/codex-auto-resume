@@ -29,6 +29,11 @@ def _early_attach_default_desktop():
 
 _early_attach_default_desktop()
 
+try:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("mrpanica.codex.autoresume.v2")
+except Exception:
+    pass
+
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFrame, QSizePolicy, QStackedWidget
@@ -42,7 +47,8 @@ from qfluentwidgets import (
     BodyLabel, SubtitleLabel, CaptionLabel, StrongBodyLabel,
     SwitchButton, PrimaryPushButton, PushButton, ToolButton,
     SearchLineEdit, LineEdit, Slider, ComboBox, ScrollArea,
-    InfoBar, InfoBarPosition, IconWidget, FluentStyleSheet
+    InfoBar, InfoBarPosition, IconWidget, FluentStyleSheet,
+    DoubleSpinBox, SpinBox
 )
 
 setTheme(Theme.DARK)
@@ -55,6 +61,7 @@ CODEX_DIR = os.path.join(USER_PROFILE, ".codex")
 os.makedirs(CODEX_DIR, exist_ok=True)
 
 SETTINGS_FILE = os.path.join(CODEX_DIR, "guardian_settings.json")
+LOG_FILE = os.path.join(CODEX_DIR, "guardian.log")
 SESSION_INDEX_FILE = os.path.join(CODEX_DIR, "session_index.jsonl")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_FILE = os.path.join(APP_DIR, "icon.ico")
@@ -134,15 +141,20 @@ TRANSLATIONS = {
         "nav_errors": "Ошибки",
         "nav_projects": "Проекты",
         "nav_timers": "Тайминги",
+        "nav_journal": "Журнал",
 
         "tab_general": "Общие параметры и запуск",
         "tab_errors": "Отслеживаемые типы ошибок",
         "tab_projects": "Участвующие проекты Codex",
         "tab_timers": "Параметры задержек и повторов",
+        "tab_journal": "Журнал событий и статистика",
 
         "grp_language": "Язык интерфейса",
         "lang_desc": "Выберите язык приложения (применяется сразу)",
         "lang_auto": "Автоматически (Система)",
+        "lang_auto_dynamic": "Автоматически ({lang})",
+        "lang_ru_name": "Русский",
+        "lang_en_name": "English",
         "lang_ru": "Русский (Russian)",
         "lang_en": "English (Английский)",
 
@@ -168,6 +180,15 @@ TRANSLATIONS = {
         "badge_system": "Системная",
         "badge_custom": "Пользовательская",
 
+        "err_model_capacity": "Перегрузка модели / сервера",
+        "err_remote_compact": "Сбой задачи сжатия (Remote Compact)",
+        "err_stream_disconnected": "Разрыв стрим-соединения / сети",
+        "err_connection_lost": "Потеря сетевого соединения",
+        "err_rate_limit": "Превышен лимит запросов (Rate Limit)",
+        "err_timeout": "Таймаут ожидания ответа",
+        "err_unexpected": "Неожиданная ошибка сервера",
+        "err_server_overloaded": "Код перегрузки сервера (ServerOverloaded)",
+
         "grp_projects": "Список проектов Codex",
         "lbl_projects_desc": "Выберите проекты, для которых сторож будет автоматически возобновлять задачи. Неотмеченные проекты игнорируются.",
         "search_projects_placeholder": "Поиск проектов по имени или пути...",
@@ -186,10 +207,28 @@ TRANSLATIONS = {
         "lbl_max_retries": "Максимум попыток подряд",
         "desc_max_retries": "Максимальное число повторов для одного сбоя (0 = без лимита)",
 
-        "poll_fast": "0.5 сек. (Быстрый)",
-        "poll_standard": "1.0 сек. (Стандартный)",
-        "poll_eco": "2.0 сек. (Энергосберегающий)",
+        "journal_stat_resumes": "Возобновлений целей",
+        "journal_stat_errors": "Перехвачено сбоев",
+        "journal_stat_status": "Статус сторожа",
+        "journal_status_active": "Активен 🟢",
+        "journal_status_paused": "На паузе ⚪",
+        "journal_btn_refresh": "Обновить",
+        "journal_btn_open_log": "Открыть лог",
+        "journal_btn_clear": "Очистить журнал",
+        "journal_empty": "Журнал пока пуст. События появятся при работе сторожа.",
+        "journal_event_resume": "Возобновление цели",
+        "journal_event_trigger": "Кнопка обнаружена",
+        "journal_event_switch": "Смена чата",
+        "journal_event_state": "Смена режима",
+        "journal_event_start": "Запуск приложения",
+        "journal_event_error": "Ошибка",
+        "journal_search_placeholder": "Поиск по записям журнала...",
+
+        "lbl_pattern_prefix": "Шаблон",
+        "switch_on": "Вкл",
+        "switch_off": "Выкл",
         "unit_seconds": "сек.",
+        "unit_times": "раз",
         "unlimited": "Без ограничений",
 
         "btn_save": "Сохранить настройки",
@@ -231,15 +270,20 @@ TRANSLATIONS = {
         "nav_errors": "Errors",
         "nav_projects": "Projects",
         "nav_timers": "Timers",
+        "nav_journal": "Journal",
 
         "tab_general": "General & Startup Options",
         "tab_errors": "Monitored Error Patterns",
         "tab_projects": "Participating Codex Projects",
         "tab_timers": "Delay Timings & Limits",
+        "tab_journal": "Event Journal & Statistics",
 
         "grp_language": "Interface Language",
         "lang_desc": "Choose application language (applied immediately)",
         "lang_auto": "Automatic (System Default)",
+        "lang_auto_dynamic": "Automatic ({lang})",
+        "lang_ru_name": "Russian",
+        "lang_en_name": "English",
         "lang_ru": "Russian (Русский)",
         "lang_en": "English",
 
@@ -265,6 +309,15 @@ TRANSLATIONS = {
         "badge_system": "System",
         "badge_custom": "Custom",
 
+        "err_model_capacity": "Model Capacity / Server Overload",
+        "err_remote_compact": "Remote Compact Task Error",
+        "err_stream_disconnected": "Stream Disconnected / Network Loss",
+        "err_connection_lost": "Connection Lost",
+        "err_rate_limit": "Rate Limit Exceeded",
+        "err_timeout": "Request Timeout",
+        "err_unexpected": "Unexpected Server Error",
+        "err_server_overloaded": "Server Overloaded Code",
+
         "grp_projects": "Codex Projects List",
         "lbl_projects_desc": "Select projects for which auto-resume will operate. Unchecked projects will be ignored.",
         "search_projects_placeholder": "Search projects by name or path...",
@@ -283,10 +336,28 @@ TRANSLATIONS = {
         "lbl_max_retries": "Max Consecutive Retries",
         "desc_max_retries": "Maximum resume attempts for a single recurring failure (0 = unlimited)",
 
-        "poll_fast": "0.5 sec (Fast)",
-        "poll_standard": "1.0 sec (Standard)",
-        "poll_eco": "2.0 sec (Energy Saving)",
+        "journal_stat_resumes": "Goals Resumed",
+        "journal_stat_errors": "Intercepted Failures",
+        "journal_stat_status": "Guardian Status",
+        "journal_status_active": "Active 🟢",
+        "journal_status_paused": "Paused ⚪",
+        "journal_btn_refresh": "Refresh",
+        "journal_btn_open_log": "Open Log File",
+        "journal_btn_clear": "Clear Journal",
+        "journal_empty": "Journal is empty yet. Events will appear as guardian runs.",
+        "journal_event_resume": "Goal Resumed",
+        "journal_event_trigger": "Button Detected",
+        "journal_event_switch": "Chat Switch",
+        "journal_event_state": "Status Change",
+        "journal_event_start": "Guardian Started",
+        "journal_event_error": "Error Notice",
+        "journal_search_placeholder": "Search journal logs...",
+
+        "lbl_pattern_prefix": "Pattern",
+        "switch_on": "On",
+        "switch_off": "Off",
         "unit_seconds": "sec",
+        "unit_times": "times",
         "unlimited": "Unlimited",
 
         "btn_save": "Save Settings",
@@ -464,7 +535,77 @@ class CustomSliderCard(SettingCard):
         self.unit = unit
         self.titleLabel.setText(title)
         self.contentLabel.setText(content)
-        self._on_slider_changed(self.slider.value())
+class CustomDoubleSpinCard(SettingCard):
+    """Карточка для точного числового ввода с плавающей точкой (DoubleSpinBox)"""
+    valueChanged = pyqtSignal(float)
+
+    def __init__(self, icon, title, content, min_val, max_val, cur_val, step=0.5, decimals=1, unit="сек.", parent=None):
+        super().__init__(icon, title, content, parent)
+        self.spin = DoubleSpinBox(self)
+        self.spin.setRange(min_val, max_val)
+        self.spin.setSingleStep(step)
+        self.spin.setDecimals(decimals)
+        self.spin.setValue(float(cur_val))
+        self.spin.setFixedWidth(130)
+
+        self.unit_lbl = QLabel(unit, self)
+        self.unit_lbl.setStyleSheet("color: #70d6ff; font-size: 13px; font-weight: bold;")
+        self.unit_lbl.setFixedWidth(50)
+
+        self.hBoxLayout.addWidget(self.spin)
+        self.hBoxLayout.addSpacing(8)
+        self.hBoxLayout.addWidget(self.unit_lbl)
+        self.hBoxLayout.addSpacing(16)
+        self.spin.valueChanged.connect(lambda v: self.valueChanged.emit(float(v)))
+
+    def value(self):
+        return self.spin.value()
+
+    def setValue(self, val):
+        self.spin.blockSignals(True)
+        self.spin.setValue(float(val))
+        self.spin.blockSignals(False)
+
+    def update_texts(self, title, content, unit):
+        self.setTitle(title)
+        self.setContent(content)
+        self.unit_lbl.setText(unit)
+
+
+class CustomSpinCard(SettingCard):
+    """Карточка для точного целочисленного ввода (SpinBox)"""
+    valueChanged = pyqtSignal(int)
+
+    def __init__(self, icon, title, content, min_val, max_val, cur_val, step=1, unit="раз", parent=None):
+        super().__init__(icon, title, content, parent)
+        self.spin = SpinBox(self)
+        self.spin.setRange(min_val, max_val)
+        self.spin.setSingleStep(step)
+        self.spin.setValue(int(cur_val))
+        self.spin.setFixedWidth(130)
+
+        self.unit_lbl = QLabel(unit, self)
+        self.unit_lbl.setStyleSheet("color: #70d6ff; font-size: 13px; font-weight: bold;")
+        self.unit_lbl.setFixedWidth(50)
+
+        self.hBoxLayout.addWidget(self.spin)
+        self.hBoxLayout.addSpacing(8)
+        self.hBoxLayout.addWidget(self.unit_lbl)
+        self.hBoxLayout.addSpacing(16)
+        self.spin.valueChanged.connect(lambda v: self.valueChanged.emit(int(v)))
+
+    def value(self):
+        return self.spin.value()
+
+    def setValue(self, val):
+        self.spin.blockSignals(True)
+        self.spin.setValue(int(val))
+        self.spin.blockSignals(False)
+
+    def update_texts(self, title, content, unit):
+        self.setTitle(title)
+        self.setContent(content)
+        self.unit_lbl.setText(unit)
 
 
 class CustomComboCard(SettingCard):
@@ -498,6 +639,39 @@ class CustomComboCard(SettingCard):
             if 0 <= cur < len(items):
                 self.combo.setCurrentIndex(cur)
 
+
+class CustomSwitchSettingCard(SwitchSettingCard):
+    """SwitchSettingCard с поддержкой мультиязычных подписей Вкл / Выкл (On / Off)"""
+    def __init__(self, icon, title, content=None, parent=None):
+        super().__init__(icon, title, content, parent=parent)
+        self.update_switch_texts()
+
+    def update_switch_texts(self):
+        tr = settings_mgr.tr
+        on_txt = tr("switch_on")
+        off_txt = tr("switch_off")
+        self.switchButton.setOnText(on_txt)
+        self.switchButton.setOffText(off_txt)
+        self.switchButton.setText(on_txt if self.isChecked() else off_txt)
+
+    def setValue(self, isChecked: bool):
+        self.switchButton.setChecked(isChecked)
+        tr = settings_mgr.tr
+        self.switchButton.setText(tr("switch_on") if isChecked else tr("switch_off"))
+
+
+STANDARD_ERROR_MAP = {
+    "selected model is at capacity": "err_model_capacity",
+    "error running remote compact task": "err_remote_compact",
+    "stream disconnected": "err_stream_disconnected",
+    "connection lost": "err_connection_lost",
+    "rate limit": "err_rate_limit",
+    "rate limit exceeded": "err_rate_limit",
+    "timeout": "err_timeout",
+    "timed out waiting for response": "err_timeout",
+    "an unexpected error occurred": "err_unexpected",
+    "serveroverloaded": "err_server_overloaded",
+}
 
 # -------------------------------------------------------------
 # Главное окно настроек на QFluentWidgets (QMainWindow)
@@ -577,11 +751,18 @@ class SettingsWindow(QMainWindow):
             onClick=lambda: self.stack.setCurrentWidget(interface)
         )
 
+    def get_auto_language_label(self):
+        sys_lang = detect_system_language()
+        tr = self.mgr.tr
+        lang_name = tr("lang_ru_name") if sys_lang == "ru" else tr("lang_en_name")
+        return tr("lang_auto_dynamic", lang=lang_name)
+
     def init_interfaces(self):
         self.interface_general = self.create_general_interface()
         self.interface_errors = self.create_errors_interface()
         self.interface_projects = self.create_projects_interface()
         self.interface_timers = self.create_timers_interface()
+        self.interface_journal = self.create_journal_interface()
 
     def init_navigation(self):
         tr = self.mgr.tr
@@ -589,6 +770,7 @@ class SettingsWindow(QMainWindow):
         self.addSubInterface(self.interface_errors, FIF.INFO, tr("nav_errors"))
         self.addSubInterface(self.interface_projects, FIF.FOLDER, tr("nav_projects"))
         self.addSubInterface(self.interface_timers, FIF.SPEED_HIGH, tr("nav_timers"))
+        self.addSubInterface(self.interface_journal, FIF.DOCUMENT, tr("nav_journal"))
         self.nav.setCurrentItem(self.interface_general.objectName())
         self.stack.setCurrentWidget(self.interface_general)
 
@@ -615,19 +797,12 @@ class SettingsWindow(QMainWindow):
         vbox.setSpacing(22)
 
         # Заголовок страницы
-        header_layout = QHBoxLayout()
         self.lbl_title_gen = SubtitleLabel(self.mgr.tr("tab_general"), container)
-        header_layout.addWidget(self.lbl_title_gen)
-        header_layout.addStretch(1)
-
-        self.btn_save_gen = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
-        self.btn_save_gen.clicked.connect(self.on_save_clicked)
-        header_layout.addWidget(self.btn_save_gen)
-        vbox.addLayout(header_layout)
+        vbox.addWidget(self.lbl_title_gen)
 
         # Группа 1: Язык
         self.grp_lang = SettingCardGroup(self.mgr.tr("grp_language"), container)
-        lang_items = [self.mgr.tr("lang_auto"), self.mgr.tr("lang_ru"), self.mgr.tr("lang_en")]
+        lang_items = [self.get_auto_language_label(), self.mgr.tr("lang_ru"), self.mgr.tr("lang_en")]
         self.card_lang = CustomComboCard(
             FIF.LANGUAGE,
             self.mgr.tr("grp_language"),
@@ -642,13 +817,13 @@ class SettingsWindow(QMainWindow):
 
         # Группа 2: Параметры запуска
         self.grp_startup = SettingCardGroup(self.mgr.tr("grp_startup"), container)
-        self.card_autostart = SwitchSettingCard(
+        self.card_autostart = CustomSwitchSettingCard(
             FIF.POWER_BUTTON,
             self.mgr.tr("chk_autostart_windows"),
             self.mgr.tr("desc_autostart_windows"),
             parent=self.grp_startup
         )
-        self.card_codex_start = SwitchSettingCard(
+        self.card_codex_start = CustomSwitchSettingCard(
             FIF.PLAY,
             self.mgr.tr("chk_enable_on_codex_start"),
             self.mgr.tr("desc_enable_on_codex_start"),
@@ -660,19 +835,19 @@ class SettingsWindow(QMainWindow):
 
         # Группа 3: Оповещения
         self.grp_notif = SettingCardGroup(self.mgr.tr("grp_notifications"), container)
-        self.card_notif_toggle = SwitchSettingCard(
+        self.card_notif_toggle = CustomSwitchSettingCard(
             FIF.CHAT,
             self.mgr.tr("chk_notify_toggle"),
             self.mgr.tr("desc_notify_toggle"),
             parent=self.grp_notif
         )
-        self.card_notif_resume = SwitchSettingCard(
+        self.card_notif_resume = CustomSwitchSettingCard(
             FIF.RINGER,
             self.mgr.tr("chk_notify_resume"),
             self.mgr.tr("desc_notify_resume"),
             parent=self.grp_notif
         )
-        self.card_sound_resume = SwitchSettingCard(
+        self.card_sound_resume = CustomSwitchSettingCard(
             FIF.VOLUME,
             self.mgr.tr("chk_sound_resume"),
             self.mgr.tr("desc_sound_resume"),
@@ -702,15 +877,8 @@ class SettingsWindow(QMainWindow):
         vbox.setSpacing(18)
 
         # Заголовок страницы
-        header_layout = QHBoxLayout()
         self.lbl_title_err = SubtitleLabel(self.mgr.tr("tab_errors"), container)
-        header_layout.addWidget(self.lbl_title_err)
-        header_layout.addStretch(1)
-
-        self.btn_save_err = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
-        self.btn_save_err.clicked.connect(self.on_save_clicked)
-        header_layout.addWidget(self.btn_save_err)
-        vbox.addLayout(header_layout)
+        vbox.addWidget(self.lbl_title_err)
 
         self.lbl_desc_err = CaptionLabel(self.mgr.tr("desc_errors_info"), container)
         self.lbl_desc_err.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
@@ -759,11 +927,15 @@ class SettingsWindow(QMainWindow):
 
         for item_data in patterns:
             pat = item_data.get("pattern", "")
-            name = item_data.get("name") or pat
-            enabled = item_data.get("enabled", True)
             is_custom = item_data.get("custom", False)
+            enabled = item_data.get("enabled", True)
 
-            card = SettingCard(FIF.INFO, name, f"Pattern: {pat}", parent=self.grp_errors)
+            if not is_custom and pat.lower() in STANDARD_ERROR_MAP:
+                name = tr(STANDARD_ERROR_MAP[pat.lower()])
+            else:
+                name = item_data.get("name") or pat
+
+            card = SettingCard(FIF.INFO, name, f"{tr('lbl_pattern_prefix')}: {pat}", parent=self.grp_errors)
 
             # Бейдж (Системная / Пользовательская)
             badge_lbl = QLabel(tr("badge_custom") if is_custom else tr("badge_system"))
@@ -788,6 +960,8 @@ class SettingsWindow(QMainWindow):
 
             # Тумблер Вкл / Выкл
             sw = SwitchButton(card)
+            sw.setOnText(tr("switch_on"))
+            sw.setOffText(tr("switch_off"))
             sw.setChecked(enabled)
             sw.checkedChanged.connect(lambda checked, d=item_data: self._on_error_toggled(d, checked))
             card.hBoxLayout.addWidget(sw)
@@ -796,7 +970,7 @@ class SettingsWindow(QMainWindow):
             if is_custom:
                 card.hBoxLayout.addSpacing(10)
                 del_btn = ToolButton(FIF.DELETE, card)
-                del_btn.setToolTip("Удалить шаблон")
+                del_btn.setToolTip("Удалить" if tr("switch_on") == "Вкл" else "Delete")
                 del_btn.clicked.connect(lambda _, d=item_data: self._on_delete_error(d))
                 card.hBoxLayout.addWidget(del_btn)
 
@@ -853,15 +1027,8 @@ class SettingsWindow(QMainWindow):
         vbox.setSpacing(18)
 
         # Заголовок страницы
-        header_layout = QHBoxLayout()
         self.lbl_title_proj = SubtitleLabel(self.mgr.tr("tab_projects"), container)
-        header_layout.addWidget(self.lbl_title_proj)
-        header_layout.addStretch(1)
-
-        self.btn_save_proj = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
-        self.btn_save_proj.clicked.connect(self.on_save_clicked)
-        header_layout.addWidget(self.btn_save_proj)
-        vbox.addLayout(header_layout)
+        vbox.addWidget(self.lbl_title_proj)
 
         self.lbl_desc_proj = CaptionLabel(self.mgr.tr("lbl_projects_desc"), container)
         self.lbl_desc_proj.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
@@ -928,6 +1095,8 @@ class SettingsWindow(QMainWindow):
             card = SettingCard(FIF.FOLDER, p_base, p_path, parent=self.grp_projects)
 
             sw = SwitchButton(card)
+            sw.setOnText(self.mgr.tr("switch_on"))
+            sw.setOffText(self.mgr.tr("switch_off"))
             sw.setChecked(is_enabled)
             sw.checkedChanged.connect(lambda checked, p=p_path: self._on_project_toggled(p, checked))
             card.hBoxLayout.addWidget(sw)
@@ -990,25 +1159,19 @@ class SettingsWindow(QMainWindow):
         vbox.setSpacing(22)
 
         # Заголовок страницы
-        header_layout = QHBoxLayout()
         self.lbl_title_time = SubtitleLabel(self.mgr.tr("tab_timers"), container)
-        header_layout.addWidget(self.lbl_title_time)
-        header_layout.addStretch(1)
-
-        self.btn_save_time = PrimaryPushButton(FIF.SAVE, self.mgr.tr("btn_save"), container)
-        self.btn_save_time.clicked.connect(self.on_save_clicked)
-        header_layout.addWidget(self.btn_save_time)
-        vbox.addLayout(header_layout)
+        vbox.addWidget(self.lbl_title_time)
 
         self.grp_timers = SettingCardGroup(self.mgr.tr("grp_timers"), container)
 
         # 1. Пауза перед возобновлением
-        retry_val = int(self.mgr.settings.get("retry_pause_seconds", 10))
-        self.card_retry = CustomSliderCard(
+        retry_val = float(self.mgr.settings.get("retry_pause_seconds", 10.0))
+        self.card_retry = CustomDoubleSpinCard(
             FIF.SPEED_HIGH,
             self.mgr.tr("lbl_retry_pause"),
             self.mgr.tr("desc_retry_pause"),
-            min_val=1, max_val=60, cur_val=retry_val,
+            min_val=0.5, max_val=300.0, cur_val=retry_val,
+            step=0.5, decimals=1,
             unit=self.mgr.tr("unit_seconds"),
             parent=self.grp_timers
         )
@@ -1016,12 +1179,13 @@ class SettingsWindow(QMainWindow):
         self.grp_timers.addSettingCard(self.card_retry)
 
         # 2. Кулдаун после возобновления
-        cd_val = int(self.mgr.settings.get("post_resume_cooldown", 6))
-        self.card_cooldown = CustomSliderCard(
+        cd_val = float(self.mgr.settings.get("post_resume_cooldown", 6.0))
+        self.card_cooldown = CustomDoubleSpinCard(
             FIF.STOP_WATCH,
             self.mgr.tr("lbl_cooldown"),
             self.mgr.tr("desc_cooldown"),
-            min_val=2, max_val=30, cur_val=cd_val,
+            min_val=0.5, max_val=300.0, cur_val=cd_val,
+            step=0.5, decimals=1,
             unit=self.mgr.tr("unit_seconds"),
             parent=self.grp_timers
         )
@@ -1029,28 +1193,28 @@ class SettingsWindow(QMainWindow):
         self.grp_timers.addSettingCard(self.card_cooldown)
 
         # 3. Частота опроса
-        poll_items = [self.mgr.tr("poll_fast"), self.mgr.tr("poll_standard"), self.mgr.tr("poll_eco")]
         cur_poll = float(self.mgr.settings.get("poll_interval_seconds", 1.0))
-        p_idx = 0 if cur_poll <= 0.6 else (2 if cur_poll >= 1.8 else 1)
-        self.card_poll = CustomComboCard(
+        self.card_poll = CustomDoubleSpinCard(
             FIF.SYNC,
             self.mgr.tr("lbl_poll_interval"),
             self.mgr.tr("desc_poll_interval"),
-            poll_items,
-            cur_idx=p_idx,
+            min_val=0.1, max_val=60.0, cur_val=cur_poll,
+            step=0.1, decimals=1,
+            unit=self.mgr.tr("unit_seconds"),
             parent=self.grp_timers
         )
-        self.card_poll.currentIndexChanged.connect(self._on_poll_changed)
+        self.card_poll.valueChanged.connect(lambda v: self._on_timer_changed("poll_interval_seconds", float(v)))
         self.grp_timers.addSettingCard(self.card_poll)
 
         # 4. Максимум попыток подряд
         retries_val = int(self.mgr.settings.get("max_retries_consecutive", 10))
-        self.card_retries = CustomSliderCard(
+        self.card_retries = CustomSpinCard(
             FIF.UPDATE,
             self.mgr.tr("lbl_max_retries"),
             self.mgr.tr("desc_max_retries"),
-            min_val=0, max_val=50, cur_val=retries_val,
-            unit="раз",
+            min_val=0, max_val=1000, cur_val=retries_val,
+            step=1,
+            unit=self.mgr.tr("unit_times"),
             parent=self.grp_timers
         )
         self.card_retries.valueChanged.connect(lambda v: self._on_timer_changed("max_retries_consecutive", int(v)))
@@ -1064,11 +1228,225 @@ class SettingsWindow(QMainWindow):
     def _on_timer_changed(self, key, val):
         self.mgr.settings[key] = val
         self.mgr.save()
+        self.settings_saved.emit()
 
-    def _on_poll_changed(self, idx):
-        poll_map = {0: 0.5, 1: 1.0, 2: 2.0}
-        self.mgr.settings["poll_interval_seconds"] = poll_map.get(idx, 1.0)
-        self.mgr.save()
+    # ---------------------------------------------------------
+    # Вкладка 5: Журнал событий
+    # ---------------------------------------------------------
+    def create_journal_interface(self):
+        scroll = ScrollArea()
+        scroll.setObjectName("journalInterface")
+        scroll.setWidgetResizable(True)
+
+        container = QWidget()
+        container.setStyleSheet("background-color: transparent;")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(36, 24, 36, 24)
+        vbox.setSpacing(18)
+
+        # Заголовок страницы
+        self.lbl_title_journal = SubtitleLabel(self.mgr.tr("tab_journal"), container)
+        vbox.addWidget(self.lbl_title_journal)
+
+        # Карточки сводной статистики
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(16)
+
+        # 1. Возобновлений целей
+        self.card_stat_resumes = CardWidget(container)
+        c1 = QVBoxLayout(self.card_stat_resumes)
+        c1.setContentsMargins(18, 16, 18, 16)
+        self.lbl_stat_resumes_title = CaptionLabel(self.mgr.tr("journal_stat_resumes"), self.card_stat_resumes)
+        self.lbl_stat_resumes_title.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
+        self.lbl_stat_resumes_val = SubtitleLabel("0", self.card_stat_resumes)
+        self.lbl_stat_resumes_val.setTextColor(QColor("#70d6ff"), QColor("#70d6ff"))
+        c1.addWidget(self.lbl_stat_resumes_title)
+        c1.addWidget(self.lbl_stat_resumes_val)
+        stats_layout.addWidget(self.card_stat_resumes)
+
+        # 2. Перехвачено сбоев
+        self.card_stat_errors = CardWidget(container)
+        c2 = QVBoxLayout(self.card_stat_errors)
+        c2.setContentsMargins(18, 16, 18, 16)
+        self.lbl_stat_errors_title = CaptionLabel(self.mgr.tr("journal_stat_errors"), self.card_stat_errors)
+        self.lbl_stat_errors_title.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
+        self.lbl_stat_errors_val = SubtitleLabel("0", self.card_stat_errors)
+        self.lbl_stat_errors_val.setTextColor(QColor("#f38ba8"), QColor("#f38ba8"))
+        c2.addWidget(self.lbl_stat_errors_title)
+        c2.addWidget(self.lbl_stat_errors_val)
+        stats_layout.addWidget(self.card_stat_errors)
+
+        # 3. Статус сторожа
+        self.card_stat_status = CardWidget(container)
+        c3 = QVBoxLayout(self.card_stat_status)
+        c3.setContentsMargins(18, 16, 18, 16)
+        self.lbl_stat_status_title = CaptionLabel(self.mgr.tr("journal_stat_status"), self.card_stat_status)
+        self.lbl_stat_status_title.setTextColor(QColor("#a6adc8"), QColor("#a6adc8"))
+        self.lbl_stat_status_val = SubtitleLabel(self.mgr.tr("journal_status_active"), self.card_stat_status)
+        self.lbl_stat_status_val.setTextColor(QColor("#a6e3a1"), QColor("#a6e3a1"))
+        c3.addWidget(self.lbl_stat_status_title)
+        c3.addWidget(self.lbl_stat_status_val)
+        stats_layout.addWidget(self.card_stat_status)
+
+        vbox.addLayout(stats_layout)
+
+        # Панель действий
+        act_card = CardWidget(container)
+        act_layout = QHBoxLayout(act_card)
+        act_layout.setContentsMargins(18, 14, 18, 14)
+        act_layout.setSpacing(12)
+
+        self.search_journal = SearchLineEdit(act_card)
+        self.search_journal.setPlaceholderText(self.mgr.tr("journal_search_placeholder"))
+        self.search_journal.textChanged.connect(self.filter_journal_events)
+        act_layout.addWidget(self.search_journal, 1)
+
+        self.btn_refresh_journal = PushButton(FIF.SYNC, self.mgr.tr("journal_btn_refresh"), act_card)
+        self.btn_refresh_journal.clicked.connect(self.refresh_journal_events)
+        act_layout.addWidget(self.btn_refresh_journal)
+
+        self.btn_open_log = PushButton(FIF.DOCUMENT, self.mgr.tr("journal_btn_open_log"), act_card)
+        self.btn_open_log.clicked.connect(self.open_external_log)
+        act_layout.addWidget(self.btn_open_log)
+
+        self.btn_clear_journal = PushButton(FIF.DELETE, self.mgr.tr("journal_btn_clear"), act_card)
+        self.btn_clear_journal.clicked.connect(self.clear_journal_log)
+        act_layout.addWidget(self.btn_clear_journal)
+
+        vbox.addWidget(act_card)
+
+        # Список событий
+        self.grp_journal = SettingCardGroup(self.mgr.tr("nav_journal"), container)
+        vbox.addWidget(self.grp_journal)
+        self.journal_item_widgets = []
+
+        vbox.addStretch(1)
+        scroll.setWidget(container)
+        return scroll
+
+    def refresh_journal_events(self):
+        while self.grp_journal.cardLayout.count():
+            item = self.grp_journal.cardLayout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.journal_item_widgets.clear()
+
+        tr = self.mgr.tr
+        resumes_count = 0
+        errors_count = 0
+        lines = []
+
+        if os.path.exists(LOG_FILE):
+            try:
+                with open(LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                    all_lines = f.readlines()
+                for line in all_lines:
+                    l_lower = line.lower()
+                    if "возобновления" in l_lower or "возобновление" in l_lower or "resumed" in l_lower or "invokepattern" in l_lower:
+                        resumes_count += 1
+                    if "[error]" in l_lower or "сбоя" in l_lower or "ошибка" in l_lower:
+                        errors_count += 1
+                lines = all_lines[-60:]
+            except Exception:
+                pass
+
+        self.lbl_stat_resumes_val.setText(str(resumes_count))
+        self.lbl_stat_errors_val.setText(str(errors_count))
+
+        if not lines:
+            empty_card = SettingCard(FIF.DOCUMENT, tr("journal_empty"), "", parent=self.grp_journal)
+            self.grp_journal.addSettingCard(empty_card)
+            return
+
+        for line in reversed(lines):
+            line_str = line.strip()
+            if not line_str or line_str.startswith("==="):
+                continue
+
+            l_low = line_str.lower()
+            if "возобновлен" in l_low or "resum" in l_low or "invokepattern" in l_low or "dodefaultaction" in l_low:
+                icon = FIF.SPEED_HIGH
+                event_title = tr("journal_event_resume")
+                badge_color = "#a6e3a1"
+                badge_bg = "rgba(166, 227, 161, 0.15)"
+            elif "кнопка" in l_low or "обнаружена" in l_low or "найдена кнопка" in l_low:
+                icon = FIF.PLAY
+                event_title = tr("journal_event_trigger")
+                badge_color = "#70d6ff"
+                badge_bg = "rgba(112, 214, 255, 0.15)"
+            elif "переключено" in l_low or "смена чата" in l_low or "switch" in l_low:
+                icon = FIF.FOLDER
+                event_title = tr("journal_event_switch")
+                badge_color = "#cba6f7"
+                badge_bg = "rgba(203, 166, 247, 0.15)"
+            elif "[error]" in l_low or "ошибка" in l_low:
+                icon = FIF.INFO
+                event_title = tr("journal_event_error")
+                badge_color = "#f38ba8"
+                badge_bg = "rgba(243, 139, 168, 0.15)"
+            elif "переключено:" in l_low or "режим" in l_low:
+                icon = FIF.UPDATE
+                event_title = tr("journal_event_state")
+                badge_color = "#fab387"
+                badge_bg = "rgba(250, 179, 135, 0.15)"
+            else:
+                icon = FIF.DOCUMENT
+                event_title = tr("journal_event_start")
+                badge_color = "#a6adc8"
+                badge_bg = "rgba(166, 173, 200, 0.15)"
+
+            ts = ""
+            msg = line_str
+            if line_str.startswith("[") and "]" in line_str:
+                parts = line_str.split("]", 2)
+                if len(parts) >= 2:
+                    ts = parts[0].strip("[")
+                    msg = parts[-1].strip()
+                    if msg.startswith("["):
+                        msg = msg.split("]", 1)[-1].strip()
+
+            card = SettingCard(icon, event_title, msg, parent=self.grp_journal)
+
+            if ts:
+                ts_lbl = QLabel(ts)
+                ts_lbl.setStyleSheet(f"""
+                    QLabel {{
+                        color: {badge_color};
+                        background-color: {badge_bg};
+                        border: 1px solid {badge_color};
+                        border-radius: 4px;
+                        padding: 3px 8px;
+                        font-size: 11px;
+                        font-family: 'Consolas', 'Segoe UI Mono', monospace;
+                    }}
+                """)
+                ts_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                card.hBoxLayout.insertWidget(0, ts_lbl)
+                card.hBoxLayout.insertSpacing(1, 14)
+
+            self.grp_journal.addSettingCard(card)
+            self.journal_item_widgets.append((card, line_str))
+
+    def filter_journal_events(self, query):
+        q = query.strip().lower()
+        for card, raw_line in self.journal_item_widgets:
+            card.setVisible(not q or q in raw_line.lower())
+
+    def open_external_log(self):
+        if os.path.exists(LOG_FILE):
+            try:
+                os.startfile(LOG_FILE)
+            except Exception:
+                pass
+
+    def clear_journal_log(self):
+        try:
+            if os.path.exists(LOG_FILE):
+                with open(LOG_FILE, "w", encoding="utf-8") as f:
+                    f.write("")
+            self.refresh_journal_events()
+        except Exception:
+            pass
 
     # ---------------------------------------------------------
     # Загрузка и сохранение настроек
@@ -1095,18 +1473,28 @@ class SettingsWindow(QMainWindow):
         for card, val in cards:
             card.switchButton.blockSignals(True)
             card.setChecked(val)
+            card.update_switch_texts()
             card.switchButton.blockSignals(False)
+
+        # Тайминги
+        self.card_retry.setValue(float(s.get("retry_pause_seconds", 10.0)))
+        self.card_cooldown.setValue(float(s.get("post_resume_cooldown", 6.0)))
+        self.card_poll.setValue(float(s.get("poll_interval_seconds", 1.0)))
+        self.card_retries.setValue(int(s.get("max_retries_consecutive", 10)))
 
         self.refresh_error_cards()
         self.refresh_project_cards()
+        self.refresh_journal_events()
 
     def _quick_save(self, key, val):
         self.mgr.settings[key] = val
         self.mgr.save()
+        self.settings_saved.emit()
 
     def _sync_autostart(self, checked):
         self.mgr.settings["autostart_windows"] = checked
         self.mgr.save()
+        self.settings_saved.emit()
         try:
             pyw = sys.executable.replace("python.exe", "pythonw.exe")
             app_py = os.path.join(APP_DIR, "codex_tray_app.py")
@@ -1132,34 +1520,38 @@ class SettingsWindow(QMainWindow):
         tr = self.mgr.tr
         self.setWindowTitle(tr("dialog_title"))
 
-        # Обновление заголовков и кнопок
+        # Обновление заголовков
         self.lbl_title_gen.setText(tr("tab_general"))
         self.lbl_title_err.setText(tr("tab_errors"))
         self.lbl_title_proj.setText(tr("tab_projects"))
         self.lbl_title_time.setText(tr("tab_timers"))
-
-        self.btn_save_gen.setText(tr("btn_save"))
-        self.btn_save_err.setText(tr("btn_save"))
-        self.btn_save_proj.setText(tr("btn_save"))
-        self.btn_save_time.setText(tr("btn_save"))
+        self.lbl_title_journal.setText(tr("tab_journal"))
 
         # Язык
-        lang_items = [tr("lang_auto"), tr("lang_ru"), tr("lang_en")]
+        lang_items = [self.get_auto_language_label(), tr("lang_ru"), tr("lang_en")]
         self.card_lang.update_texts(tr("grp_language"), tr("lang_desc"), lang_items)
 
         # Запуск
         self.card_autostart.setTitle(tr("chk_autostart_windows"))
         self.card_autostart.setContent(tr("desc_autostart_windows"))
+        self.card_autostart.update_switch_texts()
+
         self.card_codex_start.setTitle(tr("chk_enable_on_codex_start"))
         self.card_codex_start.setContent(tr("desc_enable_on_codex_start"))
+        self.card_codex_start.update_switch_texts()
 
         # Оповещения
         self.card_notif_toggle.setTitle(tr("chk_notify_toggle"))
         self.card_notif_toggle.setContent(tr("desc_notify_toggle"))
+        self.card_notif_toggle.update_switch_texts()
+
         self.card_notif_resume.setTitle(tr("chk_notify_resume"))
         self.card_notif_resume.setContent(tr("desc_notify_resume"))
+        self.card_notif_resume.update_switch_texts()
+
         self.card_sound_resume.setTitle(tr("chk_sound_resume"))
         self.card_sound_resume.setContent(tr("desc_sound_resume"))
+        self.card_sound_resume.update_switch_texts()
 
         # Ошибки
         self.lbl_desc_err.setText(tr("desc_errors_info"))
@@ -1178,9 +1570,18 @@ class SettingsWindow(QMainWindow):
         # Тайминги
         self.card_retry.update_texts(tr("lbl_retry_pause"), tr("desc_retry_pause"), tr("unit_seconds"))
         self.card_cooldown.update_texts(tr("lbl_cooldown"), tr("desc_cooldown"), tr("unit_seconds"))
-        poll_items = [tr("poll_fast"), tr("poll_standard"), tr("poll_eco")]
-        self.card_poll.update_texts(tr("lbl_poll_interval"), tr("desc_poll_interval"), poll_items)
-        self.card_retries.update_texts(tr("lbl_max_retries"), tr("desc_max_retries"), "раз")
+        self.card_poll.update_texts(tr("lbl_poll_interval"), tr("desc_poll_interval"), tr("unit_seconds"))
+        self.card_retries.update_texts(tr("lbl_max_retries"), tr("desc_max_retries"), tr("unit_times"))
+
+        # Журнал
+        self.lbl_stat_resumes_title.setText(tr("journal_stat_resumes"))
+        self.lbl_stat_errors_title.setText(tr("journal_stat_errors"))
+        self.lbl_stat_status_title.setText(tr("journal_stat_status"))
+        self.search_journal.setPlaceholderText(tr("journal_search_placeholder"))
+        self.btn_refresh_journal.setText(tr("journal_btn_refresh"))
+        self.btn_open_log.setText(tr("journal_btn_open_log"))
+        self.btn_clear_journal.setText(tr("journal_btn_clear"))
+        self.refresh_journal_events()
 
         # Обновление навигации
         key_map = {
@@ -1188,6 +1589,7 @@ class SettingsWindow(QMainWindow):
             "errorsInterface": tr("nav_errors"),
             "projectsInterface": tr("nav_projects"),
             "timersInterface": tr("nav_timers"),
+            "journalInterface": tr("nav_journal"),
         }
         for btn in self.nav.buttons():
             rk = btn.property("routeKey")
@@ -1195,19 +1597,6 @@ class SettingsWindow(QMainWindow):
                 btn.setText(key_map[rk])
 
         self.settings_saved.emit()
-
-    def on_save_clicked(self):
-        self.mgr.save()
-        self.settings_saved.emit()
-        InfoBar.success(
-            title=self.mgr.tr("msg_saved_title"),
-            content=self.mgr.tr("msg_saved_desc"),
-            orient=Qt.Orientation.Horizontal,
-            isClosable=True,
-            position=InfoBarPosition.TOP,
-            duration=2500,
-            parent=self
-        )
 
 
 # Совместимость с кодом трея

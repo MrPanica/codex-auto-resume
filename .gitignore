@@ -8,11 +8,18 @@ env/
 venv/
 .venv/
 
+# PyInstaller & Builds
+build/
+dist/
+release/
+*.spec
+
 # Logs & triggers
 *.log
 *.trigger
 *.bmp
 *.png
+!codex_base.png
 
 # OS & Editors
 .vscode/

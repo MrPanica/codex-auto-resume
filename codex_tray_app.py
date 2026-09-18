@@ -37,8 +37,8 @@ import win32gui
 import win32con
 
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
-from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter, QBrush, QPen
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QRect, QPoint
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QPainter, QBrush, QPen, QPolygon
 
 # Импорт менеджера настроек и окна настроек
 from settings_gui import settings_mgr, SettingsWindow, get_all_codex_projects
@@ -636,38 +636,50 @@ class CodexTrayManager(QObject):
             logger.debug(f"Prewarm settings window error: {e}")
 
     def create_tray_icon(self, state="active"):
-        pix = QPixmap(32, 32)
+        pix = QPixmap(64, 64)
         pix.fill(Qt.GlobalColor.transparent)
         p = QPainter(pix)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        # Подложка с закругленными углами
+        p.setBrush(QBrush(QColor(30, 32, 44)))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawRoundedRect(2, 2, 60, 60, 14, 14)
+
+        # Основной официальный векторный логотип Codex
+        base_file = os.path.join(APP_DIR, "codex_base.png")
+        if not os.path.exists(base_file):
+            base_file = os.path.join(CODEX_DIR, "codex_base.png")
+        if os.path.exists(base_file):
+            base_pix = QPixmap(base_file)
+            p.drawPixmap(QRect(6, 6, 48, 48), base_pix)
+
+        color_map = {
+            "active": QColor(16, 185, 129),
+            "paused": QColor(100, 116, 139),
+            "working": QColor(14, 165, 233)
+        }
+        color = color_map.get(state, QColor(16, 185, 129))
+
+        # Окантовка и круг статуса в правом нижнем углу
+        p.setBrush(QBrush(color))
+        p.setPen(QPen(QColor(30, 32, 44), 3.5))
+        p.drawEllipse(34, 34, 27, 27)
 
         if state == "active":
-            # Ярко-зеленый круг с белой галочкой
-            p.setBrush(QBrush(QColor(16, 185, 129)))
-            p.setPen(QPen(QColor(4, 120, 87), 2))
-            p.drawEllipse(2, 2, 28, 28)
-            p.setPen(QPen(QColor(255, 255, 255), 3))
-            p.drawLine(9, 16, 14, 22)
-            p.drawLine(14, 22, 23, 10)
+            p.setPen(QPen(QColor(255, 255, 255), 3.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            p.drawLine(41, 48, 46, 53)
+            p.drawLine(46, 53, 54, 42)
         elif state == "paused":
-            # Серый круг со значком паузы ||
-            p.setBrush(QBrush(QColor(100, 116, 139)))
-            p.setPen(QPen(QColor(51, 65, 85), 2))
-            p.drawEllipse(2, 2, 28, 28)
-            p.setBrush(QBrush(QColor(255, 255, 255)))
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawRect(10, 9, 4, 14)
-            p.drawRect(18, 9, 4, 14)
+            p.setBrush(QBrush(QColor(255, 255, 255)))
+            p.drawRoundedRect(42, 42, 4, 11, 1, 1)
+            p.drawRoundedRect(50, 42, 4, 11, 1, 1)
         elif state == "working":
-            # Голубой круг со стрелкой ▶
-            p.setBrush(QBrush(QColor(14, 165, 233)))
-            p.setPen(QPen(QColor(2, 132, 199), 2))
-            p.drawEllipse(2, 2, 28, 28)
-            p.setBrush(QBrush(QColor(255, 255, 255)))
             p.setPen(Qt.PenStyle.NoPen)
-            from PyQt6.QtGui import QPolygon
-            from PyQt6.QtCore import QPoint
-            p.drawPolygon(QPolygon([QPoint(12, 9), QPoint(23, 16), QPoint(12, 23)]))
+            p.setBrush(QBrush(QColor(255, 255, 255)))
+            p.drawPolygon(QPolygon([QPoint(44, 41), QPoint(55, 47), QPoint(44, 53)]))
 
         p.end()
         return QIcon(pix)
@@ -966,6 +978,11 @@ def main():
         except Exception:
             pass
         sys.exit(0)
+
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("mrpanica.codex.autoresume.v2")
+    except Exception:
+        pass
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
