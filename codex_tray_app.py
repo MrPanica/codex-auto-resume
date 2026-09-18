@@ -103,20 +103,26 @@ def find_codex_window():
     found_windows = []
 
     def enum_cb(h, _):
-        txt = win32gui.GetWindowText(h)
-        cls = win32gui.GetClassName(h)
-        if cls == "Chrome_WidgetWin_1" and any(k in txt.lower() for k in ("chatgpt", "codex")):
-            if win32gui.IsIconic(h):
-                found_windows.append(h)
-            elif win32gui.IsWindowVisible(h):
-                rect = win32gui.GetWindowRect(h)
-                w = rect[2] - rect[0]
-                h_size = rect[3] - rect[1]
-                if w > 300 and h_size > 300:
+        try:
+            txt = win32gui.GetWindowText(h)
+            cls = win32gui.GetClassName(h)
+            if cls == "Chrome_WidgetWin_1" and any(k in txt.lower() for k in ("chatgpt", "codex")):
+                if win32gui.IsIconic(h):
                     found_windows.append(h)
+                elif win32gui.IsWindowVisible(h):
+                    rect = win32gui.GetWindowRect(h)
+                    w = rect[2] - rect[0]
+                    h_size = rect[3] - rect[1]
+                    if w > 300 and h_size > 300:
+                        found_windows.append(h)
+        except Exception:
+            pass
         return True
 
-    win32gui.EnumWindows(enum_cb, None)
+    try:
+        win32gui.EnumWindows(enum_cb, None)
+    except Exception:
+        pass
     if found_windows:
         return found_windows[0]
     return None
@@ -252,6 +258,85 @@ def is_thread_in_progress(thread_id):
     except Exception:
         pass
     return False
+
+def get_goal_info_for_thread(thread_id=None):
+    """
+    Возвращает (chat_name, goal_text, is_explicit_goal) для указанного или последнего активного потока.
+    - chat_name: Человекочитаемое название чата из session_index.jsonl (или 'Активный чат')
+    - goal_text: Текст цели из thread_goals (или последний запрос пользователя из thread_items)
+    - is_explicit_goal: True, если найдена цель в thread_goals
+    """
+    chat_name = "Активный чат"
+    goal_text = ""
+    is_explicit_goal = False
+    tid_str = str(thread_id).strip() if thread_id else ""
+
+    name_map = get_thread_name_map()
+    if tid_str and tid_str in name_map:
+        chat_name = name_map[tid_str]
+
+    # 1. Проверяем thread_goals в goals_1.sqlite
+    if os.path.exists(GOALS_DB):
+        try:
+            conn = sqlite3.connect(f"file:{GOALS_DB}?mode=ro", uri=True, timeout=1.0)
+            cur = conn.cursor()
+            if tid_str:
+                cur.execute(
+                    "SELECT objective FROM thread_goals WHERE thread_id = ? ORDER BY updated_at_ms DESC LIMIT 1",
+                    (tid_str,)
+                )
+            else:
+                cur.execute(
+                    "SELECT thread_id, objective FROM thread_goals ORDER BY updated_at_ms DESC LIMIT 1"
+                )
+            row = cur.fetchone()
+            if row:
+                if not tid_str and len(row) == 2:
+                    found_tid = str(row[0]).strip()
+                    if found_tid in name_map:
+                        chat_name = name_map[found_tid]
+                    tid_str = found_tid
+                    obj = row[1] or ""
+                else:
+                    obj = row[0] or ""
+                if obj and obj.strip():
+                    goal_text = obj.strip()
+                    is_explicit_goal = True
+            conn.close()
+        except Exception as e:
+            logger.debug(f"Ошибка чтения thread_goals: {e}")
+
+    # 2. Если цель в thread_goals не найдена, пробуем извлечь последний запрос пользователя из thread_history_1.sqlite
+    if not goal_text and tid_str and os.path.exists(HISTORY_DB):
+        try:
+            conn = sqlite3.connect(f"file:{HISTORY_DB}?mode=ro", uri=True, timeout=1.0)
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT item_json FROM thread_items WHERE thread_id = ? AND item_type = 'userMessage' ORDER BY rowid DESC LIMIT 1",
+                (tid_str,)
+            )
+            row = cur.fetchone()
+            if row and row[0]:
+                data = json.loads(row[0])
+                c = data.get("content")
+                if isinstance(c, list):
+                    for part in c:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            goal_text = (part.get("text") or "").strip()
+                            if goal_text:
+                                break
+                elif isinstance(c, str):
+                    goal_text = c.strip()
+            conn.close()
+        except Exception as e:
+            logger.debug(f"Ошибка чтения userMessage: {e}")
+
+    # 3. Если всё ещё нет текста, но есть имя чата, используем имя чата
+    if not goal_text and chat_name and chat_name != "Активный чат":
+        goal_text = chat_name
+
+    return chat_name, goal_text, is_explicit_goal
+
 
 # -------------------------------------------------------------
 # Фоновые действия UIAutomation (без смены фокуса и без оконных событий)
@@ -564,7 +649,16 @@ class WatchdogWorker(QObject):
                             self.consecutive_retries += 1
                             self.stats_updated.emit(self.resumes_count)
                             self.resume_triggered.emit(mode_name)
-                            logger.info(f">>> {mode_name} УСПЕШНО ВОЗОБНОВЛЕНА ('{btn_name}')! Всего: {self.resumes_count} <<<")
+
+                            chat_name, goal_obj, is_explicit = get_goal_info_for_thread(tid)
+                            goal_clean = " ".join(goal_obj.split()) if goal_obj else ""
+                            goal_summary = goal_clean[:120] if goal_clean else ("Цель Codex" if is_goal else "Задача диалога")
+                            item_type = "ЦЕЛЬ" if (is_explicit or is_goal) else "ЗАДАЧА"
+
+                            logger.info(
+                                f">>> ВОЗОБНОВЛЕНИЕ ({item_type}) | Чат: «{chat_name}» | {item_type.capitalize()}: «{goal_summary}» "
+                                f"(кнопка: '{btn_name}')! Всего: {self.resumes_count} <<<"
+                            )
 
                             # Звуковое оповещение (если включено в настройках)
                             if s.get("sound_on_resume", False):

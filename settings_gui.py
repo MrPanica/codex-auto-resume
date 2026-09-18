@@ -9,6 +9,7 @@ Codex Auto-Resume Settings GUI (Windows 11 Fluent Design)
 import os
 import sys
 import json
+import re
 import ctypes
 from ctypes import wintypes
 import logging
@@ -216,7 +217,14 @@ TRANSLATIONS = {
         "journal_btn_open_log": "Открыть лог",
         "journal_btn_clear": "Очистить журнал",
         "journal_empty": "Журнал пока пуст. События появятся при работе сторожа.",
-        "journal_event_resume": "Возобновление цели",
+        "journal_event_resume": "Возобновление",
+        "journal_event_resume_goal": "Возобновление цели",
+        "journal_event_resume_task": "Возобновление задачи",
+        "journal_prefix_chat": "Чат",
+        "journal_prefix_goal": "Цель",
+        "journal_prefix_task": "Задача",
+        "journal_prefix_btn": "кнопка",
+        "journal_prefix_total": "всего",
         "journal_event_trigger": "Кнопка обнаружена",
         "journal_event_switch": "Смена чата",
         "journal_event_state": "Смена режима",
@@ -345,7 +353,14 @@ TRANSLATIONS = {
         "journal_btn_open_log": "Open Log File",
         "journal_btn_clear": "Clear Journal",
         "journal_empty": "Journal is empty yet. Events will appear as guardian runs.",
-        "journal_event_resume": "Goal Resumed",
+        "journal_event_resume": "Resumed",
+        "journal_event_resume_goal": "Goal Resumed",
+        "journal_event_resume_task": "Task Resumed",
+        "journal_prefix_chat": "Chat",
+        "journal_prefix_goal": "Goal",
+        "journal_prefix_task": "Task",
+        "journal_prefix_btn": "button",
+        "journal_prefix_total": "total",
         "journal_event_trigger": "Button Detected",
         "journal_event_switch": "Chat Switch",
         "journal_event_state": "Status Change",
@@ -1363,37 +1378,12 @@ class SettingsWindow(QMainWindow):
             if not line_str or line_str.startswith("==="):
                 continue
 
-            l_low = line_str.lower()
-            if "возобновлен" in l_low or "resum" in l_low or "invokepattern" in l_low or "dodefaultaction" in l_low:
-                icon = FIF.SPEED_HIGH
-                event_title = tr("journal_event_resume")
-                badge_color = "#a6e3a1"
-                badge_bg = "rgba(166, 227, 161, 0.15)"
-            elif "кнопка" in l_low or "обнаружена" in l_low or "найдена кнопка" in l_low:
-                icon = FIF.PLAY
-                event_title = tr("journal_event_trigger")
-                badge_color = "#70d6ff"
-                badge_bg = "rgba(112, 214, 255, 0.15)"
-            elif "переключено" in l_low or "смена чата" in l_low or "switch" in l_low:
-                icon = FIF.FOLDER
-                event_title = tr("journal_event_switch")
-                badge_color = "#cba6f7"
-                badge_bg = "rgba(203, 166, 247, 0.15)"
-            elif "[error]" in l_low or "ошибка" in l_low:
-                icon = FIF.INFO
-                event_title = tr("journal_event_error")
-                badge_color = "#f38ba8"
-                badge_bg = "rgba(243, 139, 168, 0.15)"
-            elif "переключено:" in l_low or "режим" in l_low:
-                icon = FIF.UPDATE
-                event_title = tr("journal_event_state")
-                badge_color = "#fab387"
-                badge_bg = "rgba(250, 179, 135, 0.15)"
-            else:
-                icon = FIF.DOCUMENT
-                event_title = tr("journal_event_start")
-                badge_color = "#a6adc8"
-                badge_bg = "rgba(166, 173, 200, 0.15)"
+            # Игнорируем сырой вывод стектрейсов Python во избежание захламления журнала
+            if (line_str.startswith("Traceback (") or 
+                line_str.startswith("File \"") or 
+                line_str.startswith("^^^^") or 
+                line_str.startswith("pywintypes.error")):
+                continue
 
             ts = ""
             msg = line_str
@@ -1405,7 +1395,85 @@ class SettingsWindow(QMainWindow):
                     if msg.startswith("["):
                         msg = msg.split("]", 1)[-1].strip()
 
+            l_low = msg.lower()
+            card_tooltip = line_str
+
+            if "возобновлен" in l_low or "resum" in l_low or "invokepattern" in l_low or "dodefaultaction" in l_low:
+                icon = FIF.SPEED_HIGH
+                badge_color = "#a6e3a1"
+                badge_bg = "rgba(166, 227, 161, 0.15)"
+
+                m_chat = re.search(r"Чат:\s*[«'\"](.*?)[\"»']", msg, re.IGNORECASE)
+                chat_name = m_chat.group(1).strip() if m_chat else ""
+
+                m_goal = re.search(r"(?:Цель|Задача|Goal|Task):\s*[«'\"](.*?)[\"»']", msg, re.IGNORECASE)
+                goal_text = m_goal.group(1).strip() if m_goal else ""
+
+                m_btn = re.search(r"кнопка:\s*['\"](.*?)['\"]", msg, re.IGNORECASE) or re.search(r"\('([^']+)'\)", msg)
+                btn_name = m_btn.group(1).strip() if m_btn else ""
+
+                m_cnt = re.search(r"(?:Всего|Total):\s*(\d+)", msg, re.IGNORECASE)
+                cnt_val = m_cnt.group(1).strip() if m_cnt else ""
+
+                is_task_mode = ("задача" in l_low or "task" in l_low or "(ответ)" in l_low)
+                base_title = tr("journal_event_resume_task") if is_task_mode else tr("journal_event_resume_goal")
+
+                if chat_name:
+                    event_title = f"{base_title}: {chat_name}"
+                else:
+                    event_title = base_title
+
+                parts_desc = []
+                if goal_text:
+                    prefix = tr("journal_prefix_task") if is_task_mode else tr("journal_prefix_goal")
+                    parts_desc.append(f"{prefix}: «{goal_text}»")
+                if btn_name:
+                    parts_desc.append(f"{tr('journal_prefix_btn')}: '{btn_name}'")
+                if cnt_val:
+                    parts_desc.append(f"{tr('journal_prefix_total')}: {cnt_val}")
+
+                if parts_desc:
+                    msg = "  •  ".join(parts_desc)
+                if goal_text:
+                    card_tooltip = f"{chat_name}\n{goal_text}" if chat_name else goal_text
+
+            elif "кнопка" in l_low or "обнаружена" in l_low or "найдена кнопка" in l_low:
+                icon = FIF.PLAY
+                event_title = tr("journal_event_trigger")
+                badge_color = "#70d6ff"
+                badge_bg = "rgba(112, 214, 255, 0.15)"
+
+            elif "переключено" in l_low or "смена чата" in l_low or "switch" in l_low:
+                icon = FIF.FOLDER
+                badge_color = "#cba6f7"
+                badge_bg = "rgba(203, 166, 247, 0.15)"
+                m_chat = re.search(r"чате\s*['\"](.*?)['\"]", msg, re.IGNORECASE) or re.search(r"Чат:\s*[«'\"](.*?)[\"»']", msg, re.IGNORECASE)
+                chat_name = m_chat.group(1).strip() if m_chat else ""
+                if chat_name:
+                    event_title = f"{tr('journal_event_switch')}: {chat_name}"
+                else:
+                    event_title = tr("journal_event_switch")
+
+            elif "[error]" in l_low or "ошибка" in l_low:
+                icon = FIF.INFO
+                event_title = tr("journal_event_error")
+                badge_color = "#f38ba8"
+                badge_bg = "rgba(243, 139, 168, 0.15)"
+
+            elif "переключено:" in l_low or "режим" in l_low:
+                icon = FIF.UPDATE
+                event_title = tr("journal_event_state")
+                badge_color = "#fab387"
+                badge_bg = "rgba(250, 179, 135, 0.15)"
+
+            else:
+                icon = FIF.DOCUMENT
+                event_title = tr("journal_event_start")
+                badge_color = "#a6adc8"
+                badge_bg = "rgba(166, 173, 200, 0.15)"
+
             card = SettingCard(icon, event_title, msg, parent=self.grp_journal)
+            card.setToolTip(card_tooltip)
 
             if ts:
                 ts_lbl = QLabel(ts)
