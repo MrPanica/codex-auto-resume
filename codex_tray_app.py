@@ -598,11 +598,17 @@ class WatchdogWorker(QObject):
                         time.sleep(poll_interval * 2)
                         continue
 
-                    # 2. Проверка фильтра ошибок
-                    if err_json and hasattr(settings_mgr, 'is_error_allowed') and not settings_mgr.is_error_allowed(err_json):
-                        logger.info(f"Ошибка '{err_json[:60]}' отключена в настройках. Авто-возобновление пропущено.")
-                        time.sleep(poll_interval * 2)
-                        continue
+                    # 2. Проверка фильтра ошибок (авто-возобновление ТОЛЬКО при наличии отслеживаемой ошибки)
+                    if not self.force_resume_flag:
+                        if not err_json or turn_status in ("interrupted", "completed"):
+                            # Ручная остановка пользователем или нормальное завершение -> НЕ возобновлять
+                            time.sleep(poll_interval)
+                            continue
+
+                        if not (hasattr(settings_mgr, 'is_error_allowed') and settings_mgr.is_error_allowed(err_json)):
+                            logger.info(f"Ошибка '{err_json[:60]}' отключена в настройках или не отслеживается. Авто-возобновление пропущено.")
+                            time.sleep(poll_interval * 2)
+                            continue
 
                     # 3. Лимит повторов подряд
                     if max_retries > 0 and self.consecutive_retries >= max_retries:
@@ -670,17 +676,6 @@ class WatchdogWorker(QObject):
                             time.sleep(cooldown_cfg)
                             continue
 
-                # Проверка фоновых чатов с остановленными целями
-                proj_map = get_thread_project_map()
-                for g_name, g_status, turn_st, g_tid, g_time in goals:
-                    if g_status in ("blocked", "paused") and turn_st != "inProgress":
-                        g_cwd = proj_map.get(str(g_tid).strip())
-                        if g_cwd and not settings_mgr.is_project_allowed(g_cwd):
-                            continue
-                        logger.info(f"Обнаружена остановленная цель в фоновом чате '{g_name}' ({g_status}). Переключаемся...")
-                        if switch_to_sidebar_chat(hwnd, g_name):
-                            time.sleep(2.0)
-                            break
 
                 time.sleep(poll_interval)
             except Exception as e:

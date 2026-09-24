@@ -451,7 +451,7 @@ class SettingsManager:
 
     def is_error_allowed(self, err_text):
         if not err_text:
-            return True
+            return False
         err_lower = str(err_text).lower()
         patterns = self.settings.get("error_patterns", [])
         active_patterns = [p for p in patterns if p.get("enabled", True)]
