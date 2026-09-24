@@ -64,7 +64,7 @@ def get_git_remote_repo() -> str:
     return "MrPanica/codex-auto-resume"
 
 
-def build_binary_and_archive() -> tuple[Path, Path]:
+def build_binary_and_archive(tag: str = "v2.1.0") -> tuple[Path, Path]:
     """Compiles CodexAutoResume.exe via PyInstaller and packages release ZIP."""
     print("=" * 60)
     print(">>> [1/3] Compiling CodexAutoResume.exe via PyInstaller...")
@@ -112,7 +112,7 @@ def build_binary_and_archive() -> tuple[Path, Path]:
 
     # Packaging ZIP
     print("\n>>> Packaging release archive...")
-    zip_path = release_dir / "CodexAutoResume-v2.0-Windows.zip"
+    zip_path = release_dir / f"CodexAutoResume-{tag}-Windows.zip"
     files_to_pack = [
         ("CodexAutoResume.exe", exe_path),
         ("icon.ico", icon_file),
@@ -249,8 +249,8 @@ def upload_release_asset(token: str, upload_url: str, file_path: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Codex Auto-Resume Automated Build & GitHub Release Publisher")
-    parser.add_argument("--tag", default="v2.0.0", help="Git release tag (default: v2.0.0)")
-    parser.add_argument("--title", default="", help="Release title (default: Codex Auto-Resume v2.0)")
+    parser.add_argument("--tag", default="v2.1.0", help="Git release tag (default: v2.1.0)")
+    parser.add_argument("--title", default="", help="Release title (default: Codex Auto-Resume v2.1.0)")
     parser.add_argument("--notes", default="", help="Release notes markdown content")
     parser.add_argument("--build-only", action="store_true", help="Only build binary without publishing to GitHub")
     parser.add_argument("--no-build", action="store_true", help="Skip build step and use existing dist/CodexAutoResume.exe")
@@ -261,10 +261,10 @@ def main():
     title = args.title or f"Codex Auto-Resume {tag}"
 
     if not args.no_build:
-        exe_path, zip_path = build_binary_and_archive()
+        exe_path, zip_path = build_binary_and_archive(tag)
     else:
         exe_path = PROJECT_ROOT / "dist" / "CodexAutoResume.exe"
-        zip_path = PROJECT_ROOT / "release" / "CodexAutoResume-v2.0-Windows.zip"
+        zip_path = PROJECT_ROOT / "release" / f"CodexAutoResume-{tag}-Windows.zip"
         if not exe_path.exists() or not zip_path.exists():
             raise FileNotFoundError(f"Binaries not found. Run without --no-build.")
 
@@ -283,7 +283,7 @@ def main():
 
     if args.push_tag:
         try:
-            print(f"Taging commit with {tag}...")
+            print(f"Tagging commit with {tag}...")
             subprocess.run(["git", "tag", "-a", tag, "-m", title], cwd=str(PROJECT_ROOT), check=False)
             print(f"Pushing tag {tag} to origin...")
             subprocess.run(["git", "push", "origin", tag], cwd=str(PROJECT_ROOT), check=False)
@@ -293,18 +293,15 @@ def main():
     notes = args.notes or (
         f"## 🚀 Codex Auto-Resume Watchdog {tag}\n\n"
         f"An intelligent, non-intrusive background guardian for **OpenAI Codex & ChatGPT Desktop** on Windows 10/11.\n\n"
-        f"### ✨ Highlights in v2.0:\n"
-        f"- **🎮 Zero Window / Focus Interruption:** Resumes active goals directly via UI Automation without minimizing borderless fullscreen games or stealing keyboard focus.\n"
-        f"- **🎨 Official Codex Tray Branding:** High-resolution official glyph with live status badges (🟢 Active, ⚪ Paused, 🔵 Resuming).\n"
-        f"- **🎛️ Windows 11 Fluent Design Settings:** 5 comprehensive tabs (`General`, `Errors`, `Projects`, `Timers`, `Journal`).\n"
-        f"- **⏱️ Fully Customizable Numeric Timings:** Numeric `DoubleSpinBox` / `SpinBox` inputs for pause, cooldown, poll interval, and retry count.\n"
-        f"- **📊 Event Journal & Statistics:** Live metrics (Goals Resumed, Errors Intercepted, Watchdog Status) and chronological log viewer.\n"
-        f"- **🌐 Bilingual Localization:** Dynamic Windows system language detection (`Automatic (Russian)` / `Automatic (English)`) with instant language switching.\n"
-        f"- **💾 Real-Time Auto-Save:** Every toggle, input, and rule persists immediately without manual 'Save' button clicks.\n"
-        f"- **📌 Windows Taskbar Integration:** Explicit `AppUserModelID` (`mrpanica.codex.autoresume.v2`) ensures authentic taskbar branding.\n\n"
+        f"### ⚡ What's New in {tag}:\n"
+        f"- **🛑 Strict Error-Driven Resumption (Manual Interrupt Respect):** Auto-resume now activates **only** when an enabled server error is detected (`selected model is at capacity`, `remote compact task`, `stream disconnected`, etc.). When a task is manually stopped by the user (`status: interrupted`) or completes normally (`status: completed`), the watchdog strictly respects the stop and never auto-resumes.\n"
+        f"- **🛡️ Focus Stability & Zero Window Popping:** Removed background chat switching routines to eliminate unwanted Electron/Chromium window activations and focus stealing while running other applications or games.\n"
+        f"- **📋 Enhanced Event Journal:** Displays the exact chat title, goal objective or task query, button name, and counters with rich tooltips in both Russian and English.\n"
+        f"- **🔒 Resilient Windows Enumeration:** Handled edge cases with desktop switches and Win32 `EnumWindows` error codes (error 112).\n"
+        f"- **🚀 Updated Autostart Integration:** Clean VBScript startup launcher referencing the permanent repository path.\n\n"
         f"### 📥 Downloads:\n"
         f"- **`CodexAutoResume.exe`**: Standalone portable single-file executable.\n"
-        f"- **`CodexAutoResume-v2.0-Windows.zip`**: Complete release package with assets, VBScript helper, and bilingual documentation.\n"
+        f"- **`CodexAutoResume-{tag}-Windows.zip`**: Complete release package with assets, VBScript helper, and bilingual documentation.\n"
     )
 
     release_info = create_github_release(token, repo, tag, title, notes)
